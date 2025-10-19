@@ -1,0 +1,44 @@
+{
+  "name": "beam-api",
+  "version": "0.0.0",
+  "description": "API pour Beam",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn src/index.ts",
+    "build": "tsc",
+    "start": "node ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/beamsocial/api.git"
+  },
+  "keywords": [
+    "beam",
+    "api",
+    "social"
+  ],
+  "author": "happex",
+  "license": "UNLICENSED",
+  "bugs": {
+    "url": "https://github.com/beamsocial/api/issues"
+  },
+  "homepage": "https://github.com/beamsocial/api#readme",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.7.0",
+    "@types/sqlite3": "^3.1.11",
+    "dotenv": "^17.2.3",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.9.3"
+  }
+}
