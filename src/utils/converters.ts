@@ -6,13 +6,13 @@ export const convertProfile = (profile: Profile, relations: Relations): {
 	name: string
 	display_name: string | null
 	pronouns: string | null
-	birthday: string | null
+	birthday: Date | null
 	account_type: string | null
 	description: string | null
 	status: string | null
 
-	creation_date: string
-	update_date: string
+	creation_date: Date
+	update_date: Date
 
 	level: number
 
@@ -50,14 +50,13 @@ export const convertPost = (post: Post, meta: { reposts: number, comments: numbe
         name: string
         display_name: string | null
         pronouns: string | null
-        birthday: string | null
+        birthday: Date | null
         account_type: string | null
         description: string | null
         status: string | null
 
-        creation_date: string
-        update_date: string
-
+        creation_date: Date
+        update_date: Date
         level: number
 
         followers: number
