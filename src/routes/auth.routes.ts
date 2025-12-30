@@ -115,7 +115,8 @@ router.post('/signup', async (req: Request, res: Response) => {
     let email: string = req.body.email;
     let password: string = req.body.password ?? true;
 
-    let _private: boolean = req.body.private;
+    /*let _private: boolean = req.body.private;*/
+    let _private: boolean = false;
 
 
     let password_hash = await bcrypt.hash(password, 12);
@@ -166,11 +167,11 @@ router.post('/signup', async (req: Request, res: Response) => {
             followers: [],
             friends: [],
             children: [],
-            parents: [],
+            parent: null,
         };
 
         try {
-            await db.run('INSERT INTO Relations (id, blocklist, following, followers, friends, children, parent) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', Object.values(relations));
+            await db.run('INSERT INTO Relations (id, blocklist, following, followers, friends, children, parent) VALUES ($1, $2, $3, $4, $5, $6, $7)', Object.values(relations));
         } catch (err) {
             console.error(err);
             await db.run('DELETE FROM Settings WHERE id = $1', [ account.id ]);
@@ -229,7 +230,7 @@ router.post('/signup', async (req: Request, res: Response) => {
             update_date: new Date().toISOString(),
             status: null,
             description: null,
-            birthday: null,
+            birthday: birthday ? birthday.toISOString() : null,
             pronouns: null,
             account_type: null,
             level: 3,

@@ -62,7 +62,7 @@ router.get('/posts', async (req: Request, res: Response) => {
                 following: [],
                 followers: [],
                 friends: [],
-                parents: [],
+                parent: null,
                 children: []
             } as Relations;
 

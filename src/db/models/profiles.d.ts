@@ -37,7 +37,7 @@ export type Relations = {
 	followers: Profile.id[]
 	friends: Profile.id[]
 
-	parents: Profile.id[]
+	parent: Profile.id | null
 	children: Profile.id[]
 }
 
