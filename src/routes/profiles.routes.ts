@@ -4,12 +4,13 @@ import type { Request, Response } from 'express';
 
 import { db, supabase } from '../db/index.js';
 import { can_access } from '../utils/functions.js';
+import { convertPost, convertProfile } from '../utils/converters.js';
 
 import type { Session } from '../db/models/auth.js';
-import type { Profile, Settings, Relations, Inbox } from '../db/models/profiles.js';
-import { Post } from '../db/models/interactions.js';
-import { File } from '../db/models/drive.js';
-import { convertPost, convertProfile } from '../utils/converters.js';
+import type { Profile, Settings, Relations } from '../db/models/profiles.js';
+import type { Post } from '../db/models/interactions.js';
+import type { File } from '../db/models/drive.js';
+import type { Inbox } from '../db/models/inbox.js';
 
 const router = Router();
 

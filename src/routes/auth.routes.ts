@@ -4,10 +4,11 @@ import bcrypt from 'bcrypt';
 import type { Request, Response } from 'express';
 
 import { db } from '../db/index.js';
-import { genChar, convert, parse } from '../utils/functions.js';
+import { genChar } from '../utils/functions.js';
 
 import type { Session, Account } from '../db/models/auth.js';
-import type { Profile, Settings, Relations, Tastes, Inbox } from '../db/models/profiles.js';
+import type { Profile, Settings, Relations, Tastes } from '../db/models/profiles.js';
+import type { Inbox } from '../db/models/inbox.js';
 
 const router = Router();
 
@@ -16,10 +17,10 @@ router.post('/login', async (req: Request, res: Response) => {
     let password: string = req.body.password;
 
     try {
-        let result: Account | undefined = parse(await db.get('SELECT * FROM Logins WHERE username = $1', [ username ])) as Account;
+        let result: Account | undefined = await db.get('SELECT * FROM Logins WHERE username = $1', [ username ]) as Account;
 
         if (!result) {
-            result = parse(await db.get('SELECT * FROM Logins WHERE email = $1', [ username ])) as Account;
+            result = await db.get('SELECT * FROM Logins WHERE email = $1', [ username ]) as Account;
 
             if (!result) {
                 res.status(401).json({ message: 'UserNotFound' });
@@ -76,7 +77,7 @@ router.post('/sudo', async (req: Request, res: Response) => {
             return
         }
 
-        let session: Session | undefined = parse(await db.get('SELECT * FROM Sessions WHERE token = $1', [ token ])) as Session;
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1', [ token ]) as Session;
 
         if (session) {
             session.last_activity = new Date();
@@ -86,7 +87,7 @@ router.post('/sudo', async (req: Request, res: Response) => {
             return
         }
 
-        let result: Account | undefined = parse(await db.get('SELECT * FROM Logins WHERE username = $1', [ username ])) as Account;
+        let result: Account | undefined = await db.get('SELECT * FROM Logins WHERE username = $1', [ username ]) as Account;
 
         if (!result) {
             res.status(401).json({ message: 'UserNotFound' });
@@ -266,7 +267,7 @@ router.post('/delete', async (req: Request, res: Response) => {
             return
         }
 
-        let result: Account | undefined = parse(await db.get('SELECT * FROM Logins WHERE username = $1', [ username ])) as Account;
+        let result: Account | undefined = await db.get('SELECT * FROM Logins WHERE username = $1', [ username ]) as Account;
 
         if (!result) {
             res.status(401).json({ message: 'UserNotFound' });

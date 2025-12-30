@@ -3,11 +3,12 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 
 import { db } from '../db/index.js';
-import { convert, parse, can_access, genChar } from '../utils/functions.js';
+import { can_access, genChar } from '../utils/functions.js';
 
 import type { Session } from '../db/models/auth.js';
 import type { Post, Comment } from '../db/models/interactions.js';
 import type { Profile, Settings, Relations, Tastes } from '../db/models/profiles.js';
+import type { Inbox, NotificationGroup } from '../db/models/inbox.js';
 
 const router = Router();
 
@@ -17,18 +18,18 @@ router.get('/:id', async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
 
     try {
-        let session: Session | undefined = parse(await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ])) as Session;
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
         let author: Profile | null;
 
         if (session) {
-            author = parse(await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ])) as Profile;
+            author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as Profile;
         } else {
             author = null;
         }
 
 
         let post: any;
-        post = parse(await db.get('SELECT * FROM Posts WHERE id = $1;', [ id ]));
+        post = await db.get('SELECT * FROM Posts WHERE id = $1;', [ id ]);
 
         if (!post) {
             res.status(404).json({ message: 'PostNotFound' });
@@ -36,7 +37,7 @@ router.get('/:id', async (req: Request, res: Response) => {
         }
 
         let _profile: Profile | undefined;
-        _profile = parse(await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ])) as Profile;
+        _profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as Profile;
 
         if (!_profile) {
             res.status(403).json({ message: 'PrivateAccount' });
@@ -44,11 +45,10 @@ router.get('/:id', async (req: Request, res: Response) => {
         }
 
         let relations: Relations | undefined;
-        relations = parse(await db.get('SELECT * FROM Relations WHERE id = $1;', [ _profile.id ])) as Relations;
+        relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ _profile.id ]) as Relations;
 
         let settings: Settings | undefined;
-        settings = parse(await db.get('SELECT * FROM Settings WHERE id = $1;', [ _profile.id ])) as Settings;
-
+        settings = await db.get('SELECT * FROM Settings WHERE id = $1;', [ _profile.id ]) as Settings;
 
         const is_visible = (field: string) => can_access(field, _profile, relations, session)
 
@@ -100,7 +100,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
 
     try {
-        let session: Session | undefined = parse(await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ])) as Session;
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
 
         if (!session) {
             res.status(401).json({ message: 'Unauthorized' });
@@ -108,7 +108,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
         }
 
         let author: Profile | null;
-        author = parse(await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ])) as Profile;
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as Profile;
 
         if (!author) {
             res.status(401).json({ message: 'Unauthorized' });
@@ -117,7 +117,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
 
         let post: any;
-        post = parse(await db.get('SELECT * FROM Posts WHERE name = $1;', [ id ]));
+        post = await db.get('SELECT * FROM Posts WHERE name = $1;', [ id ]);
 
         if (!post) {
             res.status(404).json({ message: 'PostNotFound' });
@@ -125,7 +125,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
         }
 
         let profile: Profile | undefined;
-        profile = parse(await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ])) as Profile;
+        profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as Profile;
 
         if (author.level >= 4 || (profile && post.id == profile.id)) {
             await db.run('DELETE * FROM Posts WHERE id = $1;', [ id ]);
@@ -147,7 +147,7 @@ router.post('/:id/like', async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
 
     try {
-        let session: Session | undefined = parse(await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ])) as Session;
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
 
         if (!session) {
             res.status(401).json({ message: 'Unauthorized' });
@@ -155,7 +155,7 @@ router.post('/:id/like', async (req: Request, res: Response) => {
         }
 
         let author: Profile | null;
-        author = parse(await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ])) as Profile;
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as Profile;
 
         if (!author) {
             res.status(401).json({ message: 'Unauthorized' });
@@ -163,12 +163,12 @@ router.post('/:id/like', async (req: Request, res: Response) => {
         }
 
         let tastes: Tastes | null;
-        tastes = parse(await db.get('SELECT * FROM Tastes WHERE id = $1;', [ session.account ])) as Tastes;
+        tastes = await db.get('SELECT * FROM Tastes WHERE id = $1;', [ session.account ]) as Tastes;
 
 
 
         let post: any;
-        post = parse(await db.get('SELECT * FROM Posts WHERE id = $1;', [ id ]));
+        post = await db.get('SELECT * FROM Posts WHERE id = $1;', [ id ]);
 
         if (!post) {
             res.status(404).json({ message: 'PostNotFound' });
@@ -176,7 +176,7 @@ router.post('/:id/like', async (req: Request, res: Response) => {
         }
 
         let profile: Profile | undefined;
-        profile = parse(await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ])) as Profile;
+        profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as Profile;
 
         if (!profile) {
             res.status(403).json({ message: 'PrivateAccount' });
@@ -184,12 +184,16 @@ router.post('/:id/like', async (req: Request, res: Response) => {
         }
 
         let relations: Relations | undefined;
-        relations = parse(await db.get('SELECT * FROM Relations WHERE id = $1;', [ profile.id ])) as Relations;
+        relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ profile.id ]) as Relations;
 
         if (relations.blocklist.includes(session.id) || relations.blocklist.includes(session.ip || '')) {
             res.status(404).json({ message: 'PostNotFound' });
             return
         }
+
+        let inbox: Inbox | undefined;
+        inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ profile.id ]) as Inbox;
+
 
 
         const is_visible = (field: string) => can_access(field, profile, relations, session)
@@ -206,6 +210,39 @@ router.post('/:id/like', async (req: Request, res: Response) => {
         } else {
             tastes.likes.push(post.id)
             post.likes += 1
+
+            let found = false;
+
+            for (const notif of inbox.other) {
+                if (
+                    notif.type == 'like'
+                    && (notif as NotificationGroup).target == post.id
+                    && !(notif as NotificationGroup).read
+                    && !(notif as NotificationGroup).authors.includes(author.id)
+                ) {
+                    (notif as NotificationGroup).authors.push(author.id)
+                    notif.date = new Date()
+                    found = true;
+
+                    break
+                }
+            }
+
+            if (!found) {
+                const new_notif: NotificationGroup = {
+                    id: genChar(12, 'hex').toUpperCase(),
+                    date: new Date(),
+                    type: 'like',
+                    isGroupable: true,
+                    read: false,
+                    authors: [ author.id ],
+                    target: post.id,
+                }
+
+                inbox.other.unshift(new_notif)
+            }
+
+            await db.run('UPDATE Inbox SET other = $1 WHERE id = $2;', [ inbox.other, profile.id ])
         }
 
         await db.run('UPDATE Tastes SET likes = $1 WHERE id = $2;', [ tastes.likes, author.id ])
@@ -225,7 +262,7 @@ router.delete('/:id/like', async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
 
     try {
-        let session: Session | undefined = parse(await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ])) as Session;
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
 
         if (!session) {
             res.status(401).json({ message: 'Unauthorized' });
@@ -233,7 +270,7 @@ router.delete('/:id/like', async (req: Request, res: Response) => {
         }
 
         let author: Profile | null;
-        author = parse(await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ])) as Profile;
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as Profile;
 
         if (!author) {
             res.status(401).json({ message: 'Unauthorized' });
@@ -241,7 +278,7 @@ router.delete('/:id/like', async (req: Request, res: Response) => {
         }
 
         let tastes: Tastes | null;
-        tastes = parse(await db.get('SELECT * FROM Tastes WHERE id = $1;', [ session.account ])) as Tastes;
+        tastes = await db.get('SELECT * FROM Tastes WHERE id = $1;', [ session.account ]) as Tastes;
 
 
 
@@ -254,7 +291,7 @@ router.delete('/:id/like', async (req: Request, res: Response) => {
         }
 
         let profile: Profile | undefined;
-        profile = parse(await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ])) as Profile;
+        profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as Profile;
 
         if (!profile) {
             res.status(403).json({ message: 'PrivateAccount' });
@@ -262,7 +299,7 @@ router.delete('/:id/like', async (req: Request, res: Response) => {
         }
 
         let relations: Relations | undefined;
-        relations = parse(await db.get('SELECT * FROM Relations WHERE id = $1;', [ profile.id ])) as Relations;
+        relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ profile.id ]) as Relations;
 
         if (relations.blocklist.includes(session.id) || relations.blocklist.includes(session.ip || '')) {
             res.status(404).json({ message: 'PostNotFound' });
@@ -307,7 +344,7 @@ router.post('/new', async (req: Request, res: Response) => {
 
 
     try {
-        let session: Session | undefined = parse(await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ])) as Session;
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
 
         if (!session) {
             res.status(401).json({ message: 'Unauthorized' });
@@ -315,7 +352,7 @@ router.post('/new', async (req: Request, res: Response) => {
         }
 
         let author: Profile | null;
-        author = parse(await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ])) as Profile;
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as Profile;
 
         if (!author) {
             res.status(401).json({ message: 'Unauthorized' });

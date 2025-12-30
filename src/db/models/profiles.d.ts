@@ -41,26 +41,6 @@ export type Relations = {
 	children: Profile.id[]
 }
 
-export type Notification = {
-	id: string
-	authors: Profile.id[]
-	type: "like" | "repost" | "warn" | "follower" | "alert" | "official"
-	target: string
-	read: boolean
-}
-
-export type Inbox = {
-	id: Profile.id
-
-	requests: {
-		children: Profile.id[]
-		following: Profile.id[]
-		followers: Profile.id[]
-	}
-
-	other: Notification[]
-}
-
 export type Tastes = {
 	id: Profile.id
 	likes: string[]

@@ -1,14 +1,16 @@
 import { Router } from 'express';
-import bcrypt from 'bcrypt';
 
 import type { Request, Response } from 'express';
 
 import { db } from '../db/index.js';
 import { can_access } from '../utils/functions.js';
+import { convertProfile } from '../utils/converters.js';
 
 import type { Session } from '../db/models/auth.js';
-import type { Profile, Settings, Relations, Tastes, Inbox } from '../db/models/profiles.js'
+import type { Profile, Settings, Relations, Tastes } from '../db/models/profiles.js'
 import type { Post } from '../db/models/interactions.js';
+import type { Inbox } from '../db/models/inbox.js';
+import type { Notification } from '../db/models/inbox.js';
 
 const router = Router();
 
@@ -26,9 +28,6 @@ router.get('/', async (req: Request, res: Response) => {
         let profile: Profile | undefined;
         profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as Profile;
 
-        let inbox: Inbox | undefined;
-        inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ session.account ]) as Inbox;
-
         let relations: Relations | undefined;
         relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ session.account ]) as Relations;
 
@@ -44,8 +43,83 @@ router.get('/', async (req: Request, res: Response) => {
             relations: relations,
             settings: settings,
             tastes: tastes,
-            inbox: inbox
+            inbox: {
+                id: '',
+                requests: {
+                    children: [],
+                    following: [],
+                    followers: []
+                },
+                other: []
+            }
         });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error' });
+    }
+});
+
+router.get('/inbox', async (req: Request, res: Response) => {
+    let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
+    let leave_unread = req.query.leave_unread === 'true' || false;
+
+    try {
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
+
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
+        let inbox: Inbox | undefined;
+        inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ session.account ]) as Inbox;
+
+        const new_inbox = {
+            id: inbox.id,
+            read: [] as Notification[],
+            unread: [] as Notification[],
+            requests: {
+                children: [] as string[],
+                following: [] as string[],
+                followers: [] as string[]
+            }
+        }
+
+        for (const u of inbox.requests.children) {
+            const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as Profile;
+
+            new_inbox.requests.children.push(_user.name);
+        }
+
+        for (const u of inbox.requests.following) {
+            const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as Profile;
+
+            new_inbox.requests.following.push(_user.name);
+        }
+
+        for (const u of inbox.requests.followers) {
+            const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as Profile;
+
+            new_inbox.requests.followers.push(_user.name);
+        }
+
+        for (const n of inbox.other) {
+            if (n.read) {
+                new_inbox.read.push(n);
+            } else {
+                new_inbox.unread.push(n);
+            }
+        }
+
+        res.status(200).json(new_inbox);
+
+        if (!leave_unread) {
+            for (const n of inbox.other) {
+                n.read = true;
+            }
+
+            await db.run('UPDATE Inbox SET other = $1 WHERE id = $2;', [ inbox.other, inbox.id ]);
+        }
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Error' });
@@ -89,8 +163,6 @@ router.put("/update", async (req: Request, res: Response) => {
         if (!session) {
             return res.status(401).json({ message: "Invalid session" });
         }
-
-        
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: "Error" });
@@ -119,7 +191,7 @@ router.get('/feed', async (req: Request, res: Response) => {
         }
 
         let posts: any[] = [];
-        let _result: any[] = await db.all('SELECT * FROM Posts WHERE id = ANY($1) ORDER BY creation_date DESC;', [ likes ]) as Post[];
+        let _result: any[] = await db.all('SELECT * FROM Posts WHERE id = ANY($1) OR author_id = ANY($2) ORDER BY creation_date DESC;', [ likes, my_relations.following ]) as Post[];
 
         for (const p of _result) {
             const profile: Profile | undefined = await db.get('SELECT * FROM Users WHERE id = $1;', [ p.author_id ]) as Profile;
