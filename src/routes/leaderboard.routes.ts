@@ -7,7 +7,7 @@ import { can_access } from '../utils/functions.js';
 
 import type { Session } from '../db/models/auth.js';
 import type { Profile, Relations, Tastes } from '../db/models/profiles.js'
-import { Post } from '@/db/models/interactions.js';
+import { Post } from '../db/models/interactions.js';
 
 const router = Router();
 

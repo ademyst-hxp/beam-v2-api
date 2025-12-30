@@ -2,10 +2,10 @@ import { Router } from 'express';
 
 import type { Request, Response } from 'express';
 
-import { db } from '@/db/index.js';
+import { db } from '../db/index.js';
 
-import type { Session } from '@/db/models/auth.js';
-import type { Profile } from '@/db/models/profiles.js';
+import type { Session } from '../db/models/auth.js';
+import type { Profile } from '../db/models/profiles.js';
 
 const router = Router();
 
