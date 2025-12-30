@@ -4,13 +4,15 @@ dotenv.config({ quiet: true, override: true });
 import express from 'express';
 import cors from 'cors';
 
-import { db } from './utils/db.js';
+import { db } from './db/index.js';
 import { parse, convert } from './utils/functions.js';
-import type { Session } from './models/auth.js';
+import type { Session } from './db/models/auth.js';
 
-import authRoute from './routes/auth.js';
-import dashboardRoute from './routes/settings.js';
-import usersRoute from './routes/profiles.js';
+import authRoute from './routes/auth.routes.js';
+import dashboardRoute from './routes/dashboard.routes.js';
+import usersRoute from './routes/profiles.routes.js';
+import leaderboardRoute from './routes/leaderboard.routes.js';
+import postsRoute from './routes/posts.routes.js';
 
 
 const app = express();
@@ -27,10 +29,10 @@ app.use(async (req, res, next) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
 
     if (token) {
-        let session: Session | null = parse(await db.get('SELECT * FROM Sessions WHERE token = ?;', [ token ])) as Session;
+        let session: Session | null = parse(await db.get('SELECT * FROM Sessions WHERE token = $1', [ token ])) as Session;
 
         if (session) {
-            await db.run('UPDATE Sessions SET last_activity = ? WHERE id = ?;', [ new Date().toISOString(), session.id ]);
+            await db.run('UPDATE Sessions SET last_activity = $1 WHERE id = $2', [ new Date().toISOString(), session.id ]);
         } else {
             res.status(401).send({ message: 'InvalidToken' });
             return
@@ -38,13 +40,17 @@ app.use(async (req, res, next) => {
     }
 
     next();
+
+    res.on('finish', () => console.log(req.method, req.path, "-", res.statusCode))
 });
 
 app.use('/auth', authRoute);
 app.use('/me', dashboardRoute);
 app.use('/users', usersRoute);
+app.use('/top', leaderboardRoute);
+app.use('/posts', postsRoute);
 
 app.listen(port, () => {
-    console.log(`DB: Editing base ${process.env.DBPATH}`);
+    console.log(`DB: Connected to ${process.env.PGHOST}:${process.env.PGPORT} as ${process.env.PGUSER}`);
     console.log(`Server: Listening on port ${port}`);
 });

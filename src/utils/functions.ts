@@ -1,6 +1,6 @@
 import crypto from 'crypto';
-import { Profile, ProfileSettings } from '../models/profiles.js';
-import type { Session } from '../models/auth.js';
+import { Profile, Settings, Relations } from '../db/models/profiles.js';
+import type { Session } from '../db/models/auth.js';
 
 export const genChar = (size: number, base: BufferEncoding): string => {
 	return crypto.randomBytes(size).toString(base);
@@ -39,15 +39,14 @@ export const parse = (obj: Record<string, any> | undefined) => {
 	return data
 }
 
-export const can_access = (value: string, profile: Profile, settings: ProfileSettings, author: Session | null): boolean => {
-	console.log(value, profile, settings, author)
+export const can_access = (value: string, profile: Profile, relations: Relations, author: Session | null): boolean => {
     if (!author) return value == 'everyone';
-    if (settings.blocklist.includes(author.account) || settings.blocklist.includes(author.ip || '')) return false;
+    if (relations.blocklist.includes(author.account) || relations.blocklist.includes(author.ip || '')) return false;
 
     switch (value) {
         case 'me': return author.account === profile.id;
-        case 'friends': return author.account === profile.id || settings.friends.includes(author.account);
-        case 'followers': return author.account === profile.id || profile.followers.includes(author.account);
+        case 'friends': return author.account === profile.id || relations.friends.includes(author.account);
+        case 'followers': return author.account === profile.id || relations.followers.includes(author.account);
         case 'everyone': return true;
         default: return false;
     }
