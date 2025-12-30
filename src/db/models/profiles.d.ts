@@ -3,13 +3,13 @@ export type Profile = {
 	name: string
 	display_name: string | null
 	pronouns: string | null
-	birthday: string | null
+	birthday: Date | null
 	account_type: string | null
 	description: string | null
 	status: string | null
 
-	creation_date: string
-	update_date: string
+	creation_date: Date
+	update_date: Date
 
 	level: number
 	flags: string[]
