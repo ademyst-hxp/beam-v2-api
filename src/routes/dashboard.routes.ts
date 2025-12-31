@@ -202,15 +202,6 @@ router.get('/feed', async (req: Request, res: Response) => {
             const reposts = await db.get(`SELECT COUNT(*) FROM Posts WHERE parent_id = $1;`, [ p.id ]);
             const comments = await db.get(`SELECT COUNT(*) FROM Comments WHERE post_id = $1;`, [ p.id ]);
 
-            const calcStats = (post: any) => {
-                let stats = post.likes;
-                stats += 2 * post.reposts;
-                stats += 5 * post.comments;
-                stats += 10 * (profile.level - 3); // mise en avant des comptes de confiance
-
-                return stats;
-            }
-
             let new_p: Record<string, any> = {
                 ...p,
                 author: {
@@ -219,9 +210,8 @@ router.get('/feed', async (req: Request, res: Response) => {
                     followers: relations.followers.length
                 },
                 likes: p.likes,
-                reposts: reposts.count,
-                comments: comments.count,
-                score: calcStats(p)
+                reposts: parseInt(reposts.count),
+                comments: parseInt(comments.count),
             }
 
             if (is_visible(p.visibility) && !my_relations.blocklist.includes(new_p.author.id)) {
@@ -231,6 +221,18 @@ router.get('/feed', async (req: Request, res: Response) => {
 
         posts = posts.sort((a, b) => new Date(b.creation_date).getTime() - new Date(a.creation_date).getTime());
 
+        const calcStats = (post: any): number => {
+            let stats = post.likes;
+            stats += 2 * post.reposts;
+            stats += 5 * post.comments;
+            stats += 10 * (post.author.level - 3); // mise en avant des comptes de confiance
+
+            return stats;
+        }
+
+        for (const post of posts) {
+            post.score = calcStats(post);
+        }
 
         posts = posts.sort((a, b) => b.score - a.score);
         posts = posts.filter((p) => !my_tastes.likes.includes(p.id));

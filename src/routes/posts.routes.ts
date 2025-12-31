@@ -373,7 +373,7 @@ router.post('/new', async (req: Request, res: Response) => {
             content: content,
             attachments: [],
             visibility: visibility,
-            creation_date: new Date().toISOString(),
+            creation_date: new Date(),
             update_date: null,
             likes: 0
         }
