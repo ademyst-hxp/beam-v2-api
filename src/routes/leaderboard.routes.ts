@@ -43,7 +43,7 @@ router.get('/users', async (req: Request, res: Response) => {
 
 router.get('/posts', async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
-    let order_by = req.query.sort_by || 'date'
+    let order_by = req.query.sort_by || 'stats'
 
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
@@ -103,9 +103,9 @@ router.get('/posts', async (req: Request, res: Response) => {
         } else if (order_by == 'stats') {
             const calcStats = (post: any) => {
                 let stats = post.likes;
-                stats += 2 * post.reposts;
-                stats += 5 * post.comments;
-                stats += 10 * (post.author.level - 3); // mise en avant des comptes de confiance
+                stats += 1.5 * post.reposts;
+                stats += 2 * post.comments;
+                stats += 5 * (post.author.level - 3); // mise en avant des comptes de confiance
 
                 return stats;
             }

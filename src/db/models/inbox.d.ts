@@ -13,6 +13,7 @@ export interface NotificationGroup extends NotificationBase {
 
 export interface NotificationSingle extends NotificationBase {
     author: string
+    target: string
 }
 
 export interface NotificationWarn extends NotificationBase {

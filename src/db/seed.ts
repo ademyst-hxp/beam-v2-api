@@ -46,7 +46,6 @@ console.log('Creating table Relations');
 await db.run(`CREATE TABLE Relations (
     id               TEXT UNIQUE NOT NULL PRIMARY KEY,
 	blocklist        TEXT[] NOT NULL DEFAULT '{}',
-	pending          JSONB NOT NULL DEFAULT '{"followers":[],"children":[]}'::jsonb,
 	following        TEXT[] NOT NULL DEFAULT '{}',
 	followers        TEXT[] NOT NULL DEFAULT '{}',
 	friends          TEXT[] NOT NULL DEFAULT '{}',
@@ -81,7 +80,7 @@ console.log('Creating table Inbox');
 await db.run(`CREATE TABLE Inbox (
     id               TEXT UNIQUE NOT NULL PRIMARY KEY,
 	requests		 JSONB NOT NULL DEFAULT '{"children":[],"following":[],"followers":[]}'::jsonb,
-	other    		 JSONB[] NOT NULL DEFAULT '{}',
+	other    		 JSONB[] NOT NULL DEFAULT '[]'::jsonb[],
 
     FOREIGN KEY (id) REFERENCES Logins(id)
 )`);

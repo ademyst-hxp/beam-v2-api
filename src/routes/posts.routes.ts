@@ -8,7 +8,7 @@ import { can_access, genChar } from '../utils/functions.js';
 import type { Session } from '../db/models/auth.js';
 import type { Post, Comment } from '../db/models/interactions.js';
 import type { Profile, Settings, Relations, Tastes } from '../db/models/profiles.js';
-import type { Inbox, NotificationGroup } from '../db/models/inbox.js';
+import type { Inbox, NotificationGroup, NotificationSingle } from '../db/models/inbox.js';
 
 const router = Router();
 
@@ -341,6 +341,7 @@ router.post('/new', async (req: Request, res: Response) => {
 
     const content: string = req.body.content
     const visibility: Post['visibility'] = req.body.visibility
+    const answers_to: string | null = req.body.answers_to || null
 
 
     try {
@@ -359,6 +360,13 @@ router.post('/new', async (req: Request, res: Response) => {
             return
         }
 
+        const parent: Post | undefined = answers_to ? await db.get('SELECT * FROM Posts WHERE id = $1;', [ answers_to ]) as Post : undefined;
+        const parent_author: Profile | undefined = parent ? await db.get('SELECT * FROM Users WHERE id = $1;', [ parent.author_id ]) as Profile : undefined;
+
+        if (answers_to && !(parent && parent_author)) {
+            res.status(404).json({ message: 'ParentPostNotFound' });
+            return
+        }
 
         /* Limitations & sécurité */
         if (content.length > 5000) {
@@ -369,7 +377,7 @@ router.post('/new', async (req: Request, res: Response) => {
         let post: any = {
             id: genChar(8, 'hex').toUpperCase(),
             author_id: author.id,
-            parent_id: null,
+            parent_id: parent?.id || null,
             content: content,
             attachments: [],
             visibility: visibility,
@@ -379,6 +387,32 @@ router.post('/new', async (req: Request, res: Response) => {
         }
 
         try {
+            if (answers_to) {
+                const parent_relations: Relations | undefined = await db.get('SELECT * FROM Relations WHERE id = $1;', [ parent_author!.id ]) as Relations;
+                const is_visible = (field: string) => can_access(field, parent_author!, parent_relations, session)
+
+                if (!is_visible(parent!.visibility)) {
+                    res.status(403).json({ message: 'ParentPostIsPrivate' });
+                    return
+                }
+
+                const parent_inbox: Inbox | undefined = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ parent_author!.id ]) as Inbox;
+
+                const new_notif: NotificationSingle = {
+                    id: genChar(12, 'hex').toUpperCase(),
+                    date: new Date(),
+                    type: 'repost',
+                    isGroupable: false,
+                    read: false,
+                    author: author.id,
+                    target: post!.id,
+                }
+
+                parent_inbox.other.unshift(new_notif)
+
+                await db.run('UPDATE Inbox SET other = $1 WHERE id = $2;', [ parent_inbox.other, parent_author!.id ])
+            }
+
             await db.run('INSERT INTO Posts (id, author_id, parent_id, content, attachments, visibility, creation_date, update_date, likes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', Object.values(post))
         } catch (err) {
             console.error(err);

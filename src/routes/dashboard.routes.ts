@@ -163,6 +163,25 @@ router.put("/update", async (req: Request, res: Response) => {
         if (!session) {
             return res.status(401).json({ message: "Invalid session" });
         }
+
+        const currentSettings = await db.get<Settings>(
+            "SELECT * FROM Settings WHERE id = $1",
+            [session.account]
+        );
+
+        const new_settings = {
+            ...currentSettings,
+            ...updates
+        };
+
+        await db.run(
+            "UPDATE Settings SET privacy = $1, appearance = $2 WHERE id = $3;",
+            [
+                new_settings.privacy,
+                new_settings.appearance,
+                session.account,
+            ]
+        );
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: "Error" });
@@ -223,9 +242,9 @@ router.get('/feed', async (req: Request, res: Response) => {
 
         const calcStats = (post: any): number => {
             let stats = post.likes;
-            stats += 2 * post.reposts;
-            stats += 5 * post.comments;
-            stats += 10 * (post.author.level - 3); // mise en avant des comptes de confiance
+            stats += 1.5 * post.reposts;
+            stats += 2 * post.comments;
+            stats += 5 * (post.author.level - 3); // mise en avant des comptes de confiance
 
             return stats;
         }
