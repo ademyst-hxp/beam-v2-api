@@ -191,7 +191,7 @@ router.get('/feed', async (req: Request, res: Response) => {
         }
 
         let posts: any[] = [];
-        let _result: any[] = await db.all('SELECT * FROM Posts WHERE id = ANY($1) OR author_id = ANY($2) ORDER BY creation_date DESC;', [ likes, my_relations.following ]) as Post[];
+        let _result: any[] = await db.all('SELECT * FROM Posts WHERE id = ANY($1) OR author_id = ANY($2) OR likes > 5 ORDER BY creation_date DESC;', [ likes, my_relations.following ]) as Post[];
 
         for (const p of _result) {
             const profile: Profile | undefined = await db.get('SELECT * FROM Users WHERE id = $1;', [ p.author_id ]) as Profile;
@@ -201,6 +201,15 @@ router.get('/feed', async (req: Request, res: Response) => {
 
             const reposts = await db.get(`SELECT COUNT(*) FROM Posts WHERE parent_id = $1;`, [ p.id ]);
             const comments = await db.get(`SELECT COUNT(*) FROM Comments WHERE post_id = $1;`, [ p.id ]);
+
+            const calcStats = (post: any) => {
+                let stats = post.likes;
+                stats += 2 * post.reposts;
+                stats += 5 * post.comments;
+                stats += 10 * (profile.level - 3); // mise en avant des comptes de confiance
+
+                return stats;
+            }
 
             let new_p: Record<string, any> = {
                 ...p,
@@ -212,6 +221,7 @@ router.get('/feed', async (req: Request, res: Response) => {
                 likes: p.likes,
                 reposts: reposts.count,
                 comments: comments.count,
+                score: calcStats(p)
             }
 
             if (is_visible(p.visibility) && !my_relations.blocklist.includes(new_p.author.id)) {
@@ -221,16 +231,8 @@ router.get('/feed', async (req: Request, res: Response) => {
 
         posts = posts.sort((a, b) => new Date(b.creation_date).getTime() - new Date(a.creation_date).getTime());
 
-        const calcStats = (post: any) => {
-            let stats = post.likes;
-            stats += 2 * post.reposts;
-            stats += 5 * post.comments;
-            stats += 10 * (post.author.level - 3); // mise en avant des comptes de confiance
 
-            return stats;
-        }
-
-        posts = posts.sort((a, b) => calcStats(b) - calcStats(a));
+        posts = posts.sort((a, b) => b.score - a.score);
         posts = posts.filter((p) => !my_tastes.likes.includes(p.id));
 
         res.status(200).json({ posts: posts });
