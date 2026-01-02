@@ -32,6 +32,7 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "multer": "^2.0.2",
     "pg": "^8.11.1",
     "tsx": "^4.21.0"
   },
@@ -39,6 +40,7 @@
     "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
+    "@types/multer": "^2.0.0",
     "@types/node": "^24.7.0",
     "@types/pg": "^8.6.6",
     "ts-node-dev": "^2.0.0",

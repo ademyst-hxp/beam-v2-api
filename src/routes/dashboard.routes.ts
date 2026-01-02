@@ -1,8 +1,10 @@
 import { Router } from 'express';
+import multer from 'multer';
+import { readFile } from 'fs/promises';
 
 import type { Request, Response } from 'express';
 
-import { db } from '../db/index.js';
+import { db, supabase } from '../db/index.js';
 import { can_access } from '../utils/functions.js';
 import { convertProfile } from '../utils/converters.js';
 
@@ -143,7 +145,7 @@ router.get('/settings', async (req: Request, res: Response) => {
     }
 });
 
-router.put("/update", async (req: Request, res: Response) => {
+router.put("/settings", async (req: Request, res: Response) => {
     const token =
         req.cookies?.token ||
         req.headers.authorization?.split(" ")[1];
@@ -182,9 +184,128 @@ router.put("/update", async (req: Request, res: Response) => {
                 session.account,
             ]
         );
+
+        res.status(200).json({ message: "Success" });
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: "Error" });
+    }
+});
+
+router.put('/profile', async (req: Request, res: Response) => {
+    let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
+    const updates: Partial<Profile> = req.body;
+
+    try {
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
+
+        let profile: Profile | undefined;
+        profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as Profile;
+
+        const new_profile = {
+            ...profile,
+            ...updates
+        };
+
+        if (
+            new_profile.name.length < 3 ||
+            new_profile.name.length > 24 ||
+            !/^[a-zA-Z0-9_]+$/.test(new_profile.name)
+        ) {
+            res.status(400).json({ message: 'InvalidProfileName' });
+            return
+        }
+
+        if (
+            new_profile.display_name && new_profile.display_name.length > 30
+        ) {
+            res.status(400).json({ message: 'InvalidDisplayName' });
+            return
+        }
+
+        if (
+            new_profile.status && new_profile.status.length > 25
+        ) {
+            res.status(400).json({ message: 'InvalidStatus' });
+            return
+        }
+
+        if (
+            new_profile.description && new_profile.description.length > 200
+        ) {
+            res.status(400).json({ message: 'InvalidDescription' });
+            return
+        }
+
+        if (
+            new_profile.pronouns && new_profile.pronouns.length > 20
+        ) {
+            res.status(400).json({ message: 'InvalidPronouns' });
+            return
+        }
+
+        await db.run('UPDATE Users SET name = $1, display_name = $2, pronouns = $3, account_type = $4, description = $5, status = $6, update_date = $7 WHERE id = $8;', [
+            new_profile.name,
+            new_profile.display_name,
+            new_profile.pronouns,
+            new_profile.account_type,
+            new_profile.description,
+            new_profile.status,
+            new Date(),
+            session.account
+        ]);
+
+        await db.run('UPDATE Logins SET username = $1 WHERE id = $2;', [
+            new_profile.name,
+            session.account
+        ]);
+
+        res.status(200).json({ message: 'Success' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error' });
+    }
+});
+
+const avatar_upload = multer({
+    dest: "uploads/", // dossier temporaire
+    limits: { fileSize: 5 * 1024 * 1024 }, // limite de taille de fichier à 5MB
+});
+
+router.post('/avatar', avatar_upload.single('avatar'),async (req: Request, res: Response) => {
+    let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
+    const avatar_data = req.file;
+
+    try {
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
+
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
+        const file_buffer = await readFile(avatar_data!.path);
+
+        await db.run('INSERT INTO Files (id, author_id, path, type, visibility, ephemeral, creation_date, update_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT(id) DO UPDATE SET type = $4, update_date = $8;', [
+            session.account,
+            session.account,
+            `/avatars/${session.account}`,
+            avatar_data?.mimetype || 'image/png',
+            'everyone',
+            false,
+            new Date(),
+            new Date()
+        ]);
+
+        await supabase.storage.from('profiles').upload(`/avatars/${session.account}`, file_buffer, {
+            contentType: avatar_data?.mimetype || 'image/png',
+            upsert: true
+        });
+
+        res.status(200).json({ message: 'Success' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error' });
     }
 });
 

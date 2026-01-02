@@ -9,6 +9,7 @@ import { genChar } from '../utils/functions.js';
 import type { Session, Account } from '../db/models/auth.js';
 import type { Profile, Settings, Relations, Tastes } from '../db/models/profiles.js';
 import type { Inbox } from '../db/models/inbox.js';
+import { randomUUID } from 'crypto';
 
 const router = Router();
 
@@ -39,8 +40,6 @@ router.post('/login', async (req: Request, res: Response) => {
                 ip: req.ip
             };
 
-            console.log(session)
-
             await db.run("INSERT INTO Sessions (id, token, account, last_activity, ip) VALUES ($1, $2, $3, $4, $5)", [
                 session.id,
                 session.token,
@@ -66,9 +65,7 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 });
 
-router.post('/sudo', async (req: Request, res: Response) => {
-    let username: string = req.body.username;
-    let password: string = req.body.password;
+router.get('/credentials', async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
 
     try {
@@ -77,27 +74,66 @@ router.post('/sudo', async (req: Request, res: Response) => {
             return
         }
 
-        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1', [ token ]) as Session;
+        let result: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1', [ token ]) as Session;
 
-        if (session) {
-            session.last_activity = new Date();
-            await db.run('UPDATE Sessions SET last_activity = $1 WHERE token = $2', [ session.last_activity, token ]);
-        } else {
+        if (!result) {
             res.status(401).json({ message: 'InvalidToken' });
             return
         }
 
+        let account = await db.get('SELECT id, username, email FROM Logins WHERE id = $1', [ result.account ]) as Account;
+
+        let data = {
+            email: account.email,
+            username: account.username
+        }
+
+        res.status(200).json(data);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error' });
+    }
+});
+
+router.post('/sudo', async (req: Request, res: Response) => {
+    let username: string = req.body.username;
+    let password: string = req.body.password;
+    let action = req.query.action || null;
+
+    try {
         let result: Account | undefined = await db.get('SELECT * FROM Logins WHERE username = $1', [ username ]) as Account;
 
         if (!result) {
-            res.status(401).json({ message: 'UserNotFound' });
-            return
+            result = await db.get('SELECT * FROM Logins WHERE email = $1', [ username ]) as Account;
+
+            if (!result) {
+                res.status(401).json({ message: 'UserNotFound' });
+                return
+            }
         }
 
         const isValid: boolean = await bcrypt.compare(password, result.password_hash);
 
         if (isValid) {
-            res.status(200).json({ message: 'Success' });
+            const sudo = {
+                created_at: new Date(),
+                token: randomUUID(),
+                action: action,
+                account: result.id,
+                __expires: new Date(new Date().getTime() + 1000 * 60 * 720), // 12 hours
+                user_generated: true
+            };
+
+            await db.run("INSERT INTO Sudo (created_at, token, action, account, __expires, user_generated) VALUES ($1, $2, $3, $4, $5, $6)", [
+                sudo.created_at,
+                sudo.token,
+                sudo.action,
+                sudo.account,
+                sudo.__expires,
+                sudo.user_generated
+            ])
+
+            res.status(200).json({ message: 'Success', token: sudo.token });
         } else {
             res.status(401).json({ message: 'InvalidPassword' });
         }
@@ -107,6 +143,7 @@ router.post('/sudo', async (req: Request, res: Response) => {
     }
 });
 
+
 router.post('/signup', async (req: Request, res: Response) => {
     let username: string = req.body.username;
     let display_name: string | null = req.body.display_name || null;
@@ -115,13 +152,36 @@ router.post('/signup', async (req: Request, res: Response) => {
     let email: string = req.body.email;
     let password: string = req.body.password ?? true;
 
-    /*let _private: boolean = req.body.private;*/
-    let _private: boolean = false;
+    let _private: boolean = req.body.private;
 
 
     let password_hash = await bcrypt.hash(password, 12);
 
     try {
+        if (
+            username.length < 3 ||
+            username.length > 24 ||
+            !/^[a-zA-Z0-9_]+$/.test(username)
+        ) {
+            res.status(400).json({ message: 'InvalidProfileName' });
+            return
+        }
+
+        if (
+            !/^[a-zA-Z0-9_]+@[a-zA-Z0-9]+\.[a-zA-Z]{2,}$/.test(email)
+        ) {
+            res.status(400).json({ message: 'InvalidEmail' });
+            return
+        }
+
+        if (
+            display_name && display_name.length > 30
+        ) {
+            res.status(400).json({ message: 'InvalidDisplayName' });
+            return
+        }
+
+
         const account: Account = {
             id: genChar(8, 'hex').toUpperCase(),
             username: username,
@@ -257,37 +317,102 @@ router.post('/signup', async (req: Request, res: Response) => {
     }
 });
 
+router.post('/password-reset', async (req: Request, res: Response) => {
+    let token: string = req.body.token;
+    let new_password: string = req.body.new_password;
+
+    try {
+        let result: Record<string, any> | undefined = await db.get('SELECT * FROM Sudo WHERE token = $1', [ token ]) as Object;
+
+        if (!result) {
+            console.log('No result for token:', token);
+            res.status(401).json({ message: 'InvalidToken' });
+            return
+        }
+
+        if (new Date(result.__expires) < new Date()) {
+            res.status(401).json({ message: 'TokenExpired' });
+            return
+        }
+
+        if (result.action !== 'password-reset') {
+            console.log('Invalid action for token:', result.action);
+            res.status(401).json({ message: 'InvalidToken' });
+            return
+        }
+
+        let password_hash = await bcrypt.hash(new_password, 12);
+
+        await db.run('UPDATE Logins SET password_hash = $1 WHERE id = $2', [ password_hash, (result as any).account ]);
+        await db.run('UPDATE Sudo SET __expires = $1 WHERE token = $2', [ new Date(), token ]);
+
+        res.status(200).json({ message: 'Success' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error' });
+    }
+});
+
+router.post('/email-reset', async (req: Request, res: Response) => {
+    let token: string = req.body.token;
+    let new_email: string = req.body.new_email;
+
+    try {
+        let result: Record<string, any> | undefined = await db.get('SELECT * FROM Sudo WHERE token = $1', [ token ]) as Object;
+
+        if (!result) {
+            console.log('No result for token:', token);
+            res.status(401).json({ message: 'InvalidToken' });
+            return
+        }
+
+        if (new Date(result.__expires) < new Date()) {
+            res.status(401).json({ message: 'TokenExpired' });
+            return
+        }
+
+        if (result.action !== 'email-reset') {
+            console.log('Invalid action for token:', result.action);
+            res.status(401).json({ message: 'InvalidToken' });
+            return
+        }
+
+        await db.run('UPDATE Logins SET email = $1 WHERE id = $2', [ new_email, (result as any).account ]);
+        await db.run('UPDATE Sudo SET __expires = $1 WHERE token = $2', [ new Date(), token ]);
+
+        res.status(200).json({ message: 'Success' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error' });
+    }
+});
+
 router.post('/delete', async (req: Request, res: Response) => {
-    let username: string = req.body.username;
-    let password: string = req.body.password;
     let token: string = req.cookies.token;
 
     try {
-        if (!token) {
-            res.status(401).json({ message: 'NoToken' });
-            return
-        }
-
-        let result: Account | undefined = await db.get('SELECT * FROM Logins WHERE username = $1', [ username ]) as Account;
+        let result: Record<string, any> | undefined = await db.get('SELECT * FROM Sudo WHERE token = $1', [ token ]) as Object;
 
         if (!result) {
-            res.status(401).json({ message: 'UserNotFound' });
+            console.log('No result for token:', token);
+            res.status(401).json({ message: 'InvalidToken' });
             return
         }
 
-        const isValid: boolean = await bcrypt.compare(password, result.password_hash);
-
-        if (isValid) {
-            await db.run('DELETE FROM Users WHERE id = $1', [ result.id ]);
-            await db.run('DELETE FROM Relations WHERE id = $1', [ result.id ]);
-            await db.run('DELETE FROM Settings WHERE id = $1', [ result.id ]);
-            await db.run('DELETE FROM Sessions WHERE account = $1', [ result.id ]); 
-            await db.run('DELETE FROM Logins WHERE id = $1', [ result.id ]);
-
-            res.status(200).json({ message: 'Success' });
-        } else {
-            res.status(401).json({ message: 'InvalidPassword' });
+        if (new Date(result.__expires) < new Date()) {
+            res.status(401).json({ message: 'TokenExpired' });
+            return
         }
+
+        if (result.action !== 'delete-account') {
+            console.log('Invalid action for token:', result.action);
+            res.status(401).json({ message: 'InvalidToken' });
+            return
+        }
+
+        await db.run('DELETE FROM Logins WHERE id = $1', [ result.id ]);
+
+        res.status(200).json({ message: 'Success' });
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Error' });
