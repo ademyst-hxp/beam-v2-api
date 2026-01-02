@@ -268,7 +268,7 @@ router.put('/profile', async (req: Request, res: Response) => {
 });
 
 const avatar_upload = multer({
-    dest: "uploads/", // dossier temporaire
+    dest: ".local/uploads/", // dossier temporaire
     limits: { fileSize: 5 * 1024 * 1024 }, // limite de taille de fichier à 5MB
 });
 
