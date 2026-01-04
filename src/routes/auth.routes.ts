@@ -102,6 +102,33 @@ router.get('/credentials', async (req: Request, res: Response) => {
     }
 });
 
+router.post('/logout', async (req: Request, res: Response) => {
+    let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
+
+    try {
+        if (!token) {
+            res.status(401).json({ message: 'NoToken' });
+            return
+        }
+
+        let result: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1', [ token ]) as Session;
+
+        if (!result) {
+            res.status(401).json({ message: 'InvalidToken' });
+            return
+        }
+
+        await db.run('DELETE FROM Sessions WHERE token = $1', [ token ]);
+
+        res.clearCookie('token');
+
+        res.status(200).json({ message: 'Success' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error' });
+    }
+});
+
 router.post('/sudo', async (req: Request, res: Response) => {
     let username: string = req.body.username;
     let password: string = req.body.password;
