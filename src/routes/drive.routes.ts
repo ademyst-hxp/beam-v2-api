@@ -6,7 +6,7 @@ import { db, supabase } from '../db/index.js';
 import { can_access } from '@/utils/functions.js';
 
 import type { Session } from '../db/models/auth.js';
-import type { Profile, Settings, Relations } from '../db/models/profiles.js';
+import type { PartialProfile, Settings, Relations } from '../db/models/profiles.js';
 import { File } from '../db/models/drive.js';
 
 const router = Router();
@@ -26,8 +26,8 @@ router.get('/:id', async (req: Request, res: Response) => {
             return
         }
 
-        let _profile: Profile | undefined;
-        _profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ _file.author_id ]) as Profile;
+        let _profile: PartialProfile | undefined;
+        _profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ _file.author_id ]) as PartialProfile;
 
         if (!_profile) {
             res.status(403).json({ message: 'FileIsPrivate' });

@@ -3,6 +3,7 @@ dotenv.config({ quiet: true, override: true });
 
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 
 import { db } from './db/index.js';
 import { parse, convert } from './utils/functions.js';
@@ -18,11 +19,15 @@ import postsRoute from './routes/posts.routes.js';
 const app = express();
 const port = process.env.PORT || 5000;
 
-app.use(cors());
+app.use(cors({
+    origin: [ 'http://localhost:5173', 'https://beam.ejnalo.me' ],
+    credentials: true
+}));
+
+app.use(cookieParser());
 app.use(express.json());
 
 app.use(async (req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 

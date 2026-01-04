@@ -3,27 +3,24 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 
 import { db } from '../db/index.js';
-import { can_access } from '../utils/functions.js';
+import { can_access, convert } from '../utils/functions.js';
 
 import type { Session } from '../db/models/auth.js';
-import type { Profile, Relations, Tastes } from '../db/models/profiles.js'
-import { Post } from '../db/models/interactions.js';
+import type { PartialProfile, Profile, Relations, Tastes } from '../db/models/profiles.js'
+import { PartialPost, Post } from '../db/models/interactions.js';
+import { convertPost, convertProfile } from '@/utils/converters.js';
 
 const router = Router();
 
 router.get('/users', async (req: Request, res: Response) => {
     try {
-        let users: any[] = [];
-        let _result: any[] = await db.all('SELECT * FROM Users;') as Profile[];
+        let users: Profile[] = [];
+        let _result: PartialProfile[] = await db.all('SELECT * FROM Users;') as PartialProfile[];
 
         for (const u of _result) {
             const relations: Relations | undefined = await db.get('SELECT * FROM Relations WHERE id = $1;', [ u.id ]) as Relations;
 
-            let new_u: Record<string, any> = {
-                ...u,
-                following: relations.following.length,
-                followers: relations.followers.length
-            }
+            let new_u: Profile = convertProfile(u, relations);
 
             users.push(new_u);
         }
@@ -69,11 +66,11 @@ router.get('/posts', async (req: Request, res: Response) => {
             my_tastes = { id: '', likes: [], hashtags: [] } as Tastes;
         }
 
-        let posts: any[] = [];
-        let _result: any[] = await db.all('SELECT * FROM Posts ORDER BY creation_date DESC;') as Post[];
+        let posts: Post[] = [];
+        let _result: PartialPost[] = await db.all('SELECT * FROM Posts ORDER BY creation_date DESC;') as PartialPost[];
 
         for (const p of _result) {
-            const profile: Profile | undefined = await db.get('SELECT * FROM Users WHERE id = $1;', [ p.author_id ]) as Profile;
+            const profile: PartialProfile | undefined = await db.get('SELECT * FROM Users WHERE id = $1;', [ p.author_id ]) as PartialProfile;
             const relations: Relations | undefined = await db.get('SELECT * FROM Relations WHERE id = $1;', [ p.author_id ]) as Relations;
 
             const is_visible = (field: string) => can_access(field, profile, relations, session)
@@ -81,17 +78,11 @@ router.get('/posts', async (req: Request, res: Response) => {
             const reposts = await db.get(`SELECT COUNT(*) FROM Posts WHERE parent_id = $1;`, [ p.id ]);
             const comments = await db.get(`SELECT COUNT(*) FROM Comments WHERE post_id = $1;`, [ p.id ]);
 
-            let new_p: Record<string, any> = {
-                ...p,
-                author: {
-                    ...profile,
-                    following: relations.following.length,
-                    followers: relations.followers.length
-                },
-                likes: p.likes,
-                reposts: reposts.count,
-                comments: comments.count,
-            }
+            let new_p: Post = convertPost(
+                p, 
+                { reposts: reposts.count, comments: comments.count },
+                convertProfile(profile, relations)
+            )
 
             if (is_visible(p.visibility) && !my_relations.blocklist.includes(new_p.author.id)) {
                 posts.push(new_p)

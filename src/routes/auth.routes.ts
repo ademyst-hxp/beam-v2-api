@@ -7,7 +7,7 @@ import { db } from '../db/index.js';
 import { genChar } from '../utils/functions.js';
 
 import type { Session, Account } from '../db/models/auth.js';
-import type { Profile, Settings, Relations, Tastes } from '../db/models/profiles.js';
+import type { PartialProfile, Settings, Relations, Tastes } from '../db/models/profiles.js';
 import type { Inbox } from '../db/models/inbox.js';
 import { randomUUID } from 'crypto';
 
@@ -48,10 +48,17 @@ router.post('/login', async (req: Request, res: Response) => {
                 session.ip
             ])
 
-            res.cookie('token', session.token, {
-                httpOnly: true,
+            let cookie = {
+                httpOnly: false,
                 secure: process.env.NODE_ENV === 'production',
-                sameSite: 'none',
+                sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+                maxAge: 1000 * 60 * 60 * 24 * 28
+            };
+
+            res.cookie('token', session.token, {
+                httpOnly: false,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
                 maxAge: 1000 * 60 * 60 * 24 * 28
             });
 
@@ -282,7 +289,7 @@ router.post('/signup', async (req: Request, res: Response) => {
             return
         }
 
-        const profile: Profile = {
+        const profile: PartialProfile = {
             id: account.id,
             name: username,
             display_name: display_name,

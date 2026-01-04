@@ -1,4 +1,4 @@
-export type Profile = {
+export type PartialProfile = {
 	id: string
 	name: string
 	display_name: string | null
@@ -13,6 +13,25 @@ export type Profile = {
 
 	level: number
 	flags: string[]
+}
+
+export type Profile = {
+	id: string
+	name: string
+	display_name: string | null
+	pronouns: string | null
+	birthday: Date | null
+	account_type: string | null
+	description: string | null
+	status: string | null
+
+	creation_date: Date
+	update_date: Date
+
+	level: number
+
+	following: number
+	followers: number
 }
 
 export type Settings = {

@@ -6,11 +6,11 @@ import type { Request, Response } from 'express';
 
 import { db, supabase } from '../db/index.js';
 import { can_access } from '../utils/functions.js';
-import { convertProfile } from '../utils/converters.js';
+import { convertPost, convertProfile } from '../utils/converters.js';
 
 import type { Session } from '../db/models/auth.js';
-import type { Profile, Settings, Relations, Tastes } from '../db/models/profiles.js'
-import type { Post } from '../db/models/interactions.js';
+import type { PartialProfile, Settings, Relations, Tastes } from '../db/models/profiles.js'
+import type { PartialPost } from '../db/models/interactions.js';
 import type { Inbox } from '../db/models/inbox.js';
 import type { Notification } from '../db/models/inbox.js';
 
@@ -27,8 +27,8 @@ router.get('/', async (req: Request, res: Response) => {
             return
         }
 
-        let profile: Profile | undefined;
-        profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as Profile;
+        let profile: PartialProfile | undefined;
+        profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
 
         let relations: Relations | undefined;
         relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ session.account ]) as Relations;
@@ -88,19 +88,19 @@ router.get('/inbox', async (req: Request, res: Response) => {
         }
 
         for (const u of inbox.requests.children) {
-            const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as Profile;
+            const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as PartialProfile;
 
             new_inbox.requests.children.push(_user.name);
         }
 
         for (const u of inbox.requests.following) {
-            const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as Profile;
+            const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as PartialProfile;
 
             new_inbox.requests.following.push(_user.name);
         }
 
         for (const u of inbox.requests.followers) {
-            const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as Profile;
+            const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as PartialProfile;
 
             new_inbox.requests.followers.push(_user.name);
         }
@@ -194,13 +194,13 @@ router.put("/settings", async (req: Request, res: Response) => {
 
 router.put('/profile', async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
-    const updates: Partial<Profile> = req.body;
+    const updates: Partial<PartialProfile> = req.body;
 
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
 
-        let profile: Profile | undefined;
-        profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as Profile;
+        let profile: PartialProfile | undefined;
+        profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
 
         const new_profile = {
             ...profile,
@@ -331,10 +331,10 @@ router.get('/feed', async (req: Request, res: Response) => {
         }
 
         let posts: any[] = [];
-        let _result: any[] = await db.all('SELECT * FROM Posts WHERE id = ANY($1) OR author_id = ANY($2) OR likes > 5 ORDER BY creation_date DESC;', [ likes, my_relations.following ]) as Post[];
+        let _result: PartialPost[] = await db.all('SELECT * FROM Posts WHERE id = ANY($1) OR author_id = ANY($2) OR likes > 5 ORDER BY creation_date DESC;', [ likes, my_relations.following ]) as PartialPost[];
 
         for (const p of _result) {
-            const profile: Profile | undefined = await db.get('SELECT * FROM Users WHERE id = $1;', [ p.author_id ]) as Profile;
+            const profile: PartialProfile | undefined = await db.get('SELECT * FROM Users WHERE id = $1;', [ p.author_id ]) as PartialProfile;
             const relations: Relations | undefined = await db.get('SELECT * FROM Relations WHERE id = $1;', [ p.author_id ]) as Relations;
 
             const is_visible = (field: string) => can_access(field, profile, relations, session)
@@ -342,17 +342,14 @@ router.get('/feed', async (req: Request, res: Response) => {
             const reposts = await db.get(`SELECT COUNT(*) FROM Posts WHERE parent_id = $1;`, [ p.id ]);
             const comments = await db.get(`SELECT COUNT(*) FROM Comments WHERE post_id = $1;`, [ p.id ]);
 
-            let new_p: Record<string, any> = {
-                ...p,
-                author: {
-                    ...profile,
-                    following: relations.following.length,
-                    followers: relations.followers.length
+            let new_p = convertPost(
+                p, 
+                { 
+                    reposts: parseInt(reposts.count), 
+                    comments: parseInt(comments.count)
                 },
-                likes: p.likes,
-                reposts: parseInt(reposts.count),
-                comments: parseInt(comments.count),
-            }
+                convertProfile(profile, relations)
+            );
 
             if (is_visible(p.visibility) && !my_relations.blocklist.includes(new_p.author.id)) {
                 posts.push(new_p)

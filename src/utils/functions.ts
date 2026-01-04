@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { Profile, Settings, Relations } from '../db/models/profiles.js';
+import { PartialProfile, Settings, Relations } from '../db/models/profiles.js';
 import type { Session } from '../db/models/auth.js';
 
 export const genChar = (size: number, base: BufferEncoding): string => {
@@ -39,7 +39,7 @@ export const parse = (obj: Record<string, any> | undefined) => {
 	return data
 }
 
-export const can_access = (value: string, profile: Profile, relations: Relations, author: Session | null): boolean => {
+export const can_access = (value: string, profile: PartialProfile, relations: Relations, author: Session | null): boolean => {
     if (!author) return value == 'everyone';
     if (relations.blocklist.includes(author.account) || relations.blocklist.includes(author.ip || '')) return false;
 

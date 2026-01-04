@@ -7,8 +7,8 @@ import { can_access } from '../utils/functions.js';
 import { convertPost, convertProfile } from '../utils/converters.js';
 
 import type { Session } from '../db/models/auth.js';
-import type { Profile, Settings, Relations } from '../db/models/profiles.js';
-import type { Post } from '../db/models/interactions.js';
+import type { PartialProfile, Settings, Relations } from '../db/models/profiles.js';
+import type { PartialPost, Post } from '../db/models/interactions.js';
 import type { File } from '../db/models/drive.js';
 import type { Inbox } from '../db/models/inbox.js';
 
@@ -21,8 +21,8 @@ router.get('/:name', async (req: Request, res: Response) => {
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
 
-        let profile: Profile | undefined;
-        profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as Profile;
+        let profile: PartialProfile | undefined;
+        profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
 
         if (!profile) {
             res.status(404).json({ message: 'UserNotFound' });
@@ -66,8 +66,8 @@ router.get('/:name/avatar', async (req: Request, res: Response) => {
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
 
-        let _profile: Profile | undefined;
-        _profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as Profile;
+        let _profile: PartialProfile | undefined;
+        _profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
 
         if (!_profile) {
             res.status(404).json({ message: 'UserNotFound' });
@@ -151,8 +151,8 @@ router.get('/:name/posts', async (req: Request, res: Response) => {
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
 
-        let profile: Profile | undefined;
-        profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as Profile;
+        let profile: PartialProfile | undefined;
+        profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
 
         if (!profile) {
             res.status(404).json({ message: 'UserNotFound' });
@@ -182,17 +182,16 @@ router.get('/:name/posts', async (req: Request, res: Response) => {
 
 
         let posts: any[] | undefined = [];
-        let _result: any[] = await db.all('SELECT * FROM Posts WHERE author_id = $1;', [ profile.id ]) as Post[];
+        let _result: any[] = await db.all('SELECT * FROM Posts WHERE author_id = $1;', [ profile.id ]) as PartialPost[];
 
         for (const p of _result) {
             const reposts = await db.get(`SELECT COUNT(*) FROM Posts WHERE parent_id = $1;`, [ p.id ]);
             const comments = await db.get(`SELECT COUNT(*) FROM Comments WHERE post_id = $1;`, [ p.id ]);
 
-            let new_p = convertPost(
+            let new_p: Post = convertPost(
                 p, 
                 { reposts: reposts.count, comments: comments.count },
-                profile,
-                relations
+                convertProfile(profile, relations)
             )
 
             if (is_visible(p.visibility)) {
@@ -229,8 +228,8 @@ router.post('/:name/follow', async (req: Request, res: Response) => {
             return
         }
 
-        let author: Profile | null;
-        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as Profile;
+        let author: PartialProfile | null;
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
 
         if (!author) {
             res.status(401).json({ message: 'Unauthorized' });
@@ -241,8 +240,8 @@ router.post('/:name/follow', async (req: Request, res: Response) => {
         my_relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ author.id ]) as Relations;
 
 
-        let profile: Profile | undefined;
-        profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as Profile;
+        let profile: PartialProfile | undefined;
+        profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
 
         if (!profile) {
             res.status(404).json({ message: 'UserNotFound' });
@@ -305,8 +304,8 @@ router.post('/:name/unfollow', async (req: Request, res: Response) => {
             return
         }
 
-        let author: Profile | null;
-        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as Profile;
+        let author: PartialProfile | null;
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
 
         if (!author) {
             res.status(401).json({ message: 'Unauthorized' });
@@ -318,8 +317,8 @@ router.post('/:name/unfollow', async (req: Request, res: Response) => {
 
 
 
-        let profile: Profile | undefined;
-        profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as Profile;
+        let profile: PartialProfile | undefined;
+        profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
 
         if (!profile) {
             res.status(404).json({ message: 'UserNotFound' });
@@ -363,8 +362,8 @@ router.post('/:name/accept/follow', async (req: Request, res: Response) => {
             return
         }
 
-        let author: Profile | null;
-        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as Profile;
+        let author: PartialProfile | null;
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
 
         if (!author) {
             res.status(401).json({ message: 'Unauthorized' });
@@ -378,8 +377,8 @@ router.post('/:name/accept/follow', async (req: Request, res: Response) => {
         my_inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ author.id ]) as Inbox;
 
 
-        let profile: Profile | undefined;
-        profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as Profile;
+        let profile: PartialProfile | undefined;
+        profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
 
         if (!profile) {
             res.status(404).json({ message: 'UserNotFound' });
@@ -437,8 +436,8 @@ router.post('/:name/block', async (req: Request, res: Response) => {
             return
         }
 
-        let author: Profile | null;
-        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as Profile;
+        let author: PartialProfile | null;
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
 
         if (!author) {
             res.status(401).json({ message: 'Unauthorized' });
@@ -449,8 +448,8 @@ router.post('/:name/block', async (req: Request, res: Response) => {
         relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ author.id ]) as Relations;
 
 
-        let profile: Profile | undefined;
-        profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as Profile;
+        let profile: PartialProfile | undefined;
+        profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
 
         if (!profile) {
             res.status(404).json({ message: 'UserNotFound' });
@@ -486,8 +485,8 @@ router.post('/:name/unblock', async (req: Request, res: Response) => {
             return
         }
 
-        let author: Profile | null;
-        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as Profile;
+        let author: PartialProfile | null;
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
 
         if (!author) {
             res.status(401).json({ message: 'Unauthorized' });
@@ -497,8 +496,8 @@ router.post('/:name/unblock', async (req: Request, res: Response) => {
         let relations: Relations | undefined;
         relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ author.id ]) as Relations;
 
-        let profile: Profile | undefined;
-        profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as Profile;
+        let profile: PartialProfile | undefined;
+        profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
 
         if (!profile) {
             res.status(404).json({ message: 'UserNotFound' });

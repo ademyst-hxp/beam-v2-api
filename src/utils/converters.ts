@@ -1,24 +1,7 @@
-import type { Profile, Relations } from "@/db/models/profiles.js";
-import type { Post } from "@/db/models/interactions.js";
+import type { PartialProfile, Profile, Relations } from "@/db/models/profiles.js";
+import type { PartialPost, Post, PartialComment, Comment } from "@/db/models/interactions.js";
 
-export const convertProfile = (profile: Profile, relations: Relations): {
-    id: string
-	name: string
-	display_name: string | null
-	pronouns: string | null
-	birthday: Date | null
-	account_type: string | null
-	description: string | null
-	status: string | null
-
-	creation_date: Date
-	update_date: Date
-
-	level: number
-
-    followers: number
-    following: number
-} => {
+export const convertProfile = (profile: PartialProfile, relations: Relations): Profile => {
     let { flags, ...p } = profile
 
     return {
@@ -28,47 +11,52 @@ export const convertProfile = (profile: Profile, relations: Relations): {
     }
 }
 
-export const convertPost = (post: Post, meta: { reposts: number, comments: number }, author: Profile, relations: Relations): {
-    id: string
-    parent_id: string | null
-
-    content: string
-    attachments: string[]
-
-    visibility: "me" | "friends" | "followers" | "everyone"
-    creation_date: Date
-    update_date: Date | null
-
-    likes: number
-    reposts: number
-    comments: number
-
-    tags: string[]
-
-    author: {
-        id: string
-        name: string
-        display_name: string | null
-        pronouns: string | null
-        birthday: Date | null
-        account_type: string | null
-        description: string | null
-        status: string | null
-
-        creation_date: Date
-        update_date: Date
-        level: number
-
-        followers: number
-        following: number
-    }
-} => {
+export const convertPost = (
+    post: PartialPost,
+    meta: {
+        reposts: number,
+        comments: number
+    },
+    author: Profile
+): Post => {
     let { flags, ...p } = post
 
     return {
-        author: convertProfile(author, relations),
+        author: author,
         reposts: meta.reposts,
         comments: meta.comments,
         ...p
     }
 }
+
+export const convertComment = (
+    comment: PartialComment, 
+    meta: { answers: number },
+    post: Post,
+    author: Profile,
+): Comment => {
+    let { flags, ...c } = comment
+
+    return {
+        ...c,
+        answers: meta.answers,
+        author: author,
+        post: post
+    }
+}
+
+/* convertComment */
+/*const data: any = {
+    ...__without_id,
+    answers: parseInt(answers.count),
+    author: convertProfile(_profile, relations),
+    post: convertPost(
+        _post, 
+        {
+            reposts: parseInt(reposts.count),
+            comments: parseInt(comments.count)
+        },
+        _profile,
+        relations
+    )
+}*/
