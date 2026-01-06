@@ -411,7 +411,7 @@ router.post('/new', async (req: Request, res: Response) => {
             author_id: author.id,
             post_id: post.id,
             parent_id: parent?.id || null,
-            content: he.escape(content),
+            content: content,
             visibility: visibility,
             creation_date: new Date(),
             update_date: null,

@@ -358,7 +358,7 @@ router.post('/new', async (req: Request, res: Response) => {
             id: genChar(8, 'hex').toUpperCase(),
             author_id: author.id,
             parent_id: parent?.id || null,
-            content: he.escape(content),
+            content: content,
             attachments: [],
             visibility: visibility,
             creation_date: new Date(),
