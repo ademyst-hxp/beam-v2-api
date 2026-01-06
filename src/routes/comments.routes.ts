@@ -10,7 +10,7 @@ import type { Session } from '../db/models/auth.js';
 import type { PartialPost, PartialComment, Comment, Post } from '../db/models/interactions.js';
 import type { PartialProfile, Settings, Relations, Tastes } from '../db/models/profiles.js';
 import type { Inbox, NotificationPost, NotificationSingle } from '../db/models/inbox.js';
-import { convertComment, convertPost, convertProfile } from '@/utils/converters.js';
+import { convertComment, convertPost, convertProfile } from '../utils/converters.js';
 
 const router = Router();
 

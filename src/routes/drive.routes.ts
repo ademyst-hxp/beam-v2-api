@@ -3,7 +3,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 
 import { db, supabase } from '../db/index.js';
-import { can_access } from '@/utils/functions.js';
+import { can_access } from '../utils/functions.js';
 
 import type { Session } from '../db/models/auth.js';
 import type { PartialProfile, Settings, Relations } from '../db/models/profiles.js';

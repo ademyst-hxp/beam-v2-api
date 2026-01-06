@@ -8,7 +8,7 @@ import { can_access, convert } from '../utils/functions.js';
 import type { Session } from '../db/models/auth.js';
 import type { PartialProfile, Profile, Relations, Tastes } from '../db/models/profiles.js'
 import { PartialPost, Post } from '../db/models/interactions.js';
-import { convertPost, convertProfile } from '@/utils/converters.js';
+import { convertPost, convertProfile } from '../utils/converters.js';
 
 const router = Router();
 
