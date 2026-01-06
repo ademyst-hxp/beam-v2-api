@@ -315,6 +315,11 @@ router.get('/feed', async (req: Request, res: Response) => {
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
 
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
         let my_relations: Relations | undefined;
         my_relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ session.account ]) as Relations;
 

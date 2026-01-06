@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import type { Request, Response } from 'express';
+import he from 'he'
 
 import { db } from '../db/index.js';
 import { can_access, genChar } from '../utils/functions.js';
@@ -9,7 +10,7 @@ import { convertPost, convertProfile } from '../utils/converters.js';
 import type { Session } from '../db/models/auth.js';
 import type { PartialPost, Post } from '../db/models/interactions.js';
 import type { PartialProfile, Settings, Relations, Tastes } from '../db/models/profiles.js';
-import type { Inbox, NotificationGroup, NotificationSingle } from '../db/models/inbox.js';
+import type { Inbox, NotificationSingle, NotificationPost } from '../db/models/inbox.js';
 
 const router = Router();
 
@@ -123,7 +124,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
         profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as PartialProfile;
 
         if (author.level >= 4 || (profile && post.id == profile.id)) {
-            await db.run('DELETE * FROM Posts WHERE id = $1;', [ id ]);
+            await db.run('DELETE FROM Posts WHERE id = $1;', [ id ]);
         } else {
             res.status(403).json({ message: 'Forbidden' })
         }
@@ -186,10 +187,6 @@ router.post('/:id/like', async (req: Request, res: Response) => {
             return
         }
 
-        let inbox: Inbox | undefined;
-        inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ profile.id ]) as Inbox;
-
-
 
         const is_visible = (field: string) => can_access(field, profile, relations, session)
 
@@ -206,36 +203,20 @@ router.post('/:id/like', async (req: Request, res: Response) => {
             tastes.likes.push(post.id)
             post.likes += 1
 
-            let found = false;
+            let inbox: Inbox | undefined;
+            inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ profile.id ]) as Inbox;
 
-            for (const notif of inbox.other) {
-                if (
-                    notif.type == 'like'
-                    && (notif as NotificationGroup).target == post.id
-                    && !(notif as NotificationGroup).read
-                    && !(notif as NotificationGroup).authors.includes(author.id)
-                ) {
-                    (notif as NotificationGroup).authors.push(author.id)
-                    notif.date = new Date()
-                    found = true;
-
-                    break
-                }
+            const new_notif: NotificationPost = {
+                id: genChar(12, 'hex').toUpperCase(),
+                date: new Date(),
+                type: 'like',
+                isGroupable: false,
+                read: false,
+                author: author.id,
+                target: post.id,
             }
 
-            if (!found) {
-                const new_notif: NotificationGroup = {
-                    id: genChar(12, 'hex').toUpperCase(),
-                    date: new Date(),
-                    type: 'like',
-                    isGroupable: true,
-                    read: false,
-                    authors: [ author.id ],
-                    target: post.id,
-                }
-
-                inbox.other.unshift(new_notif)
-            }
+            inbox.other.unshift(new_notif)        
 
             await db.run('UPDATE Inbox SET other = $1 WHERE id = $2;', [ inbox.other, profile.id ])
         }
@@ -377,7 +358,7 @@ router.post('/new', async (req: Request, res: Response) => {
             id: genChar(8, 'hex').toUpperCase(),
             author_id: author.id,
             parent_id: parent?.id || null,
-            content: content,
+            content: he.escape(content),
             attachments: [],
             visibility: visibility,
             creation_date: new Date(),
@@ -396,7 +377,7 @@ router.post('/new', async (req: Request, res: Response) => {
 
             const parent_inbox: Inbox | undefined = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ parent_author!.id ]) as Inbox;
 
-            const new_notif: NotificationSingle = {
+            const new_notif: NotificationPost = {
                 id: genChar(12, 'hex').toUpperCase(),
                 date: new Date(),
                 type: 'repost',

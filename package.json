@@ -28,11 +28,13 @@
   "homepage": "https://github.com/beamsocial/api#readme",
   "dependencies": {
     "@supabase/supabase-js": "^2.89.0",
+    "@types/he": "^1.2.3",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "he": "^1.2.0",
     "multer": "^2.0.2",
     "pg": "^8.11.1",
     "tsx": "^4.21.0"

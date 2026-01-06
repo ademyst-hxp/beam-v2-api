@@ -1,32 +1,27 @@
-export interface NotificationBase {
+export interface NotificationSingle {
     id: string
     date: Date
     type: string
     isGroupable: boolean
     read: boolean
-}
-
-export interface NotificationGroup extends NotificationBase {
-    authors: string[]
-    target: string
-}
-
-export interface NotificationSingle extends NotificationBase {
     author: string
+}
+
+export interface NotificationPost extends NotificationSingle {
     target: string
 }
 
-export interface NotificationWarn extends NotificationBase {
+export interface NotificationWarn extends NotificationSingle {
     reason: string
 }
 
-export interface NotificationBan extends NotificationBase {
+export interface NotificationBan extends NotificationSingle {
     soft: boolean
     until: Date
     reason: string
 }
 
-export type Notification = NotificationGroup | NotificationSingle | NotificationWarn | NotificationBan;
+export type Notification = NotificationSingle | NotificationWarn | NotificationBan;
 
 export type Inbox = {
     id: string

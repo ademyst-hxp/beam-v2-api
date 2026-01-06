@@ -3,14 +3,14 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 
 import { db, supabase } from '../db/index.js';
-import { can_access } from '../utils/functions.js';
+import { can_access, genChar } from '../utils/functions.js';
 import { convertPost, convertProfile } from '../utils/converters.js';
 
 import type { Session } from '../db/models/auth.js';
 import type { PartialProfile, Settings, Relations } from '../db/models/profiles.js';
 import type { PartialPost, Post } from '../db/models/interactions.js';
 import type { File } from '../db/models/drive.js';
-import type { Inbox } from '../db/models/inbox.js';
+import type { Inbox, NotificationSingle } from '../db/models/inbox.js';
 
 const router = Router();
 
@@ -276,6 +276,19 @@ router.post('/:name/follow', async (req: Request, res: Response) => {
                 my_relations.following.push(profile.id);
                 await db.run('UPDATE Relations SET following = $1 WHERE id = $2;', [ my_relations.following, author.id ]);
 
+                const new_notif: NotificationSingle = {
+                    id: genChar(12, 'hex').toUpperCase(),
+                    date: new Date(),
+                    type: 'follow',
+                    isGroupable: false,
+                    read: false,
+                    author: author.id,
+                }
+
+                inbox.other.unshift(new_notif)        
+
+                await db.run('UPDATE Inbox SET other = $1 WHERE id = $2;', [ inbox.other, profile.id ])
+
                 res.status(200).json({ message: 'Success' });
                 return
             } else {
@@ -411,6 +424,19 @@ router.post('/:name/accept/follow', async (req: Request, res: Response) => {
             my_inbox.requests.followers = 
                 my_inbox.requests.followers.filter(id => (id !== profile.id));
             await db.run('UPDATE Inbox SET requests = $1 WHERE id = $2;', [ my_inbox.requests, author.id ]);
+
+            const new_notif: NotificationSingle = {
+                id: genChar(12, 'hex').toUpperCase(),
+                date: new Date(),
+                type: 'accept_follow',
+                isGroupable: false,
+                read: false,
+                author: author.id,
+            }
+
+            inbox.other.unshift(new_notif)        
+
+            await db.run('UPDATE Inbox SET other = $1 WHERE id = $2;', [ inbox.other, profile.id ])
 
             res.status(200).json({ message: 'Success' });
             return

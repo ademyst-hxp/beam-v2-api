@@ -39,8 +39,7 @@ app.use(async (req, res, next) => {
         if (session) {
             await db.run('UPDATE Sessions SET last_activity = $1 WHERE id = $2', [ new Date().toISOString(), session.id ]);
         } else {
-            res.status(401).send({ message: 'InvalidToken' });
-            return
+            res.clearCookie('token');
         }
     }
 
