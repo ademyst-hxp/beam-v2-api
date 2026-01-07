@@ -6,7 +6,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 
 import { db } from './db/index.js';
-import { parse, convert } from './utils/functions.js';
+import { parse } from './utils/functions.js';
 import type { Session } from './db/models/auth.js';
 
 import authRoute from './routes/auth.routes.js';
@@ -14,7 +14,10 @@ import dashboardRoute from './routes/dashboard.routes.js';
 import usersRoute from './routes/profiles.routes.js';
 import leaderboardRoute from './routes/leaderboard.routes.js';
 import postsRoute from './routes/posts.routes.js';
-
+import shortUserRoute from './routes/share.routes.js';
+import driveRoute from './routes/drive.routes.js';
+import modRoute from './routes/mod.routes.js';
+import commentsRoute from './routes/comments.routes.js';
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -53,6 +56,10 @@ app.use('/me', dashboardRoute);
 app.use('/users', usersRoute);
 app.use('/top', leaderboardRoute);
 app.use('/posts', postsRoute);
+app.use('/comments', commentsRoute);
+app.use('/u', shortUserRoute);
+app.use('/drive', driveRoute);
+app.use('/mod', modRoute);
 
 app.listen(port, () => {
     console.log(`DB: Connected to ${process.env.PGHOST}:${process.env.PGPORT} as ${process.env.PGUSER}`);

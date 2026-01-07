@@ -439,6 +439,20 @@ router.post('/delete', async (req: Request, res: Response) => {
 
         await db.run('DELETE FROM Logins WHERE id = $1', [ result.id ]);
 
+        const followers = await db.all('SELECT id FROM Relations WHERE $1 = ANY(following);', [ result.account ]) as Relations[];
+
+        for (const f of followers) {
+            f.following = f.following.filter((id) => id !== result.account);
+            await db.run('UPDATE Relations SET following = $1 WHERE id = $2;', [ f.following, f.id ]);
+        }
+
+        const following = await db.all('SELECT id FROM Relations WHERE $1 = ANY(following);', [ result.account ]) as Relations[];
+
+        for (const f of following) {
+            f.followers = f.followers.filter((id) => id !== result.account);
+            await db.run('UPDATE Relations SET followers = $1 WHERE id = $2;', [ f.followers, f.id ]);
+        }
+
         res.status(200).json({ message: 'Success' });
     } catch (err) {
         console.error(err);
