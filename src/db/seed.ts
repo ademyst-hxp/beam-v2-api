@@ -16,10 +16,36 @@ await db.run(`CREATE TABLE Sessions (
     id              TEXT UNIQUE NOT NULL PRIMARY KEY,
     token           TEXT NOT NULL,
     account         TEXT NOT NULL,
-    last_activity   DATE NOT NULL,
+    last_activity   TIMESTAMPTZ NOT NULL,
     ip              TEXT NOT NULL,
 
     FOREIGN KEY (account) REFERENCES Logins(id)
+)`);
+
+console.log('Creating table Sudo');
+await db.run(`CREATE TABLE Sudo (
+    id              TEXT UNIQUE NOT NULL PRIMARY KEY,
+	created_at      TIMESTAMPTZ NOT NULL,
+    token           TEXT NOT NULL,
+	action          TEXT NOT NULL,
+    account         TEXT NOT NULL,
+    __expires	    TIMESTAMPTZ NOT NULL,
+    user_generated  BOOLEAN NOT NULL,
+
+    FOREIGN KEY (account) REFERENCES Logins(id)
+)`);
+
+/************************************/
+// PROFILS ET RELATIONS
+
+console.log('Creating table Badges');
+await db.run(`CREATE TABLE Badges (
+	id              TEXT UNIQUE NOT NULL PRIMARY KEY,
+	title           TEXT NOT NULL,
+	description     TEXT NOT NULL,
+	colors		    JSONB NOT NULL,
+	icon		    TEXT NOT NULL,
+	level           INTEGER NOT NULL
 )`);
 
 console.log('Creating table Users');
@@ -38,6 +64,27 @@ await db.run(`CREATE TABLE Users (
 
 	level           INTEGER NOT NULL DEFAULT 3,
 	flags           TEXT[] NOT NULL DEFAULT '{}',
+
+    FOREIGN KEY (id) REFERENCES Logins(id)
+)`);
+
+console.log('Creating table Settings');
+await db.run(`CREATE TABLE Settings (
+    id               TEXT UNIQUE NOT NULL PRIMARY KEY,
+	privacy          JSONB NOT NULL DEFAULT '{"profile":"friends","birthday": "friends","status":"friends","dms":"friends"}'::jsonb,
+	appearance       JSONB NOT NULL DEFAULT '{"global_theme":"light"}'::jsonb,
+
+    FOREIGN KEY (id) REFERENCES Logins(id)
+)`);
+
+/************************************/
+// INTERACTIONS
+
+console.log('Creating table Inbox');
+await db.run(`CREATE TABLE Inbox (
+    id               TEXT UNIQUE NOT NULL PRIMARY KEY,
+	requests		 JSONB NOT NULL DEFAULT '{"children":[],"following":[],"followers":[]}'::jsonb,
+	other    		 JSONB[] NOT NULL DEFAULT '[]'::jsonb[],
 
     FOREIGN KEY (id) REFERENCES Logins(id)
 )`);
@@ -64,27 +111,6 @@ await db.run(`CREATE TABLE Tastes (
     FOREIGN KEY (id) REFERENCES Logins(id)
 )`);
 
-console.log('Creating table Settings');
-await db.run(`CREATE TABLE Settings (
-    id               TEXT UNIQUE NOT NULL PRIMARY KEY,
-	privacy          JSONB NOT NULL DEFAULT '{"profile":"friends","birthday": "friends","status":"friends","dms":"friends"}'::jsonb,
-	appearance       JSONB NOT NULL DEFAULT '{"global_theme":"light"}'::jsonb,
-
-    FOREIGN KEY (id) REFERENCES Logins(id)
-)`);
-
-/************************************/
-// INTERACTIONS
-
-console.log('Creating table Inbox');
-await db.run(`CREATE TABLE Inbox (
-    id               TEXT UNIQUE NOT NULL PRIMARY KEY,
-	requests		 JSONB NOT NULL DEFAULT '{"children":[],"following":[],"followers":[]}'::jsonb,
-	other    		 JSONB[] NOT NULL DEFAULT '[]'::jsonb[],
-
-    FOREIGN KEY (id) REFERENCES Logins(id)
-)`);
-
 console.log('Creating table Posts');
 await db.run(`CREATE TABLE Posts (
 	id               TEXT UNIQUE NOT NULL PRIMARY KEY,
@@ -95,8 +121,8 @@ await db.run(`CREATE TABLE Posts (
 	attachments      TEXT[] NOT NULL DEFAULT '{}',
 
 	visibility       TEXT NOT NULL,
-	creation_date	 DATE NOT NULL,
-	update_date	     DATE,
+	creation_date	 TIMESTAMPTZ NOT NULL,
+	update_date	     TIMESTAMPTZ,
 
 	likes            INTEGER NOT NULL,
 	tags			 TEXT[] NOT NULL DEFAULT '{}',
@@ -115,8 +141,8 @@ await db.run(`CREATE TABLE Comments (
 	content          TEXT NOT NULL,
 
 	visibility       TEXT NOT NULL,
-	creation_date	 DATE NOT NULL,
-	update_date	     DATE,
+	creation_date	 TIMESTAMPTZ NOT NULL,
+	update_date	     TIMESTAMPTZ,
 
 	likes            INTEGER NOT NULL,
 	flags			 TEXT[] NOT NULL DEFAULT '{}',
@@ -136,8 +162,8 @@ await db.run(`CREATE TABLE Files (
 
 	visibility       TEXT NOT NULL,
 	ephemeral        BOOLEAN NOT NULL,
-	creation_date	 DATE NOT NULL,
-	update_date	     DATE,
+	creation_date	 TIMESTAMPTZ NOT NULL,
+	update_date	     TIMESTAMPTZ,
 
 	FOREIGN KEY (author_id) REFERENCES Users(id)
 )`);
