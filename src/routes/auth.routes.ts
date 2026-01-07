@@ -48,17 +48,10 @@ router.post('/login', async (req: Request, res: Response) => {
                 session.ip
             ])
 
-            let cookie = {
-                httpOnly: false,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-                maxAge: 1000 * 60 * 60 * 24 * 28
-            };
-
             res.cookie('token', session.token, {
-                httpOnly: false,
+                httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
-                sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+                sameSite: 'lax',
                 maxAge: 1000 * 60 * 60 * 24 * 28
             });
 
