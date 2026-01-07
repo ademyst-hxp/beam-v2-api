@@ -60,6 +60,10 @@ router.get('/:name', async (req: Request, res: Response) => {
 });
 
 router.get('/:name/avatar', async (req: Request, res: Response) => {
+    res.redirect(`/profiles/${req.params.name}/avatar.png`)
+});
+
+router.get('/:name/avatar.png', async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
     let name: string = req.params.name;
 
