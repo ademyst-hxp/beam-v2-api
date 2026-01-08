@@ -60,7 +60,7 @@ router.get('/:name', async (req: Request, res: Response) => {
 });
 
 router.get('/:name/avatar', async (req: Request, res: Response) => {
-    res.redirect(`/profiles/${req.params.name}/avatar.png`)
+    res.redirect(`/users/${req.params.name}/avatar.png`)
 });
 
 router.get('/:name/avatar.png', async (req: Request, res: Response) => {
