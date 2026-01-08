@@ -62,6 +62,7 @@ router.get('/:name', async (req: Request, res: Response) => {
             <meta property="og:description" content="${profile.description || 'Beam Profile'}">
             <meta property="og:image" content="https://api.beam.ejnalo.me/users/${profile.name}/avatar.png">
             <meta property="og:author" content="${profile.name}">
+            <meta property="og:color" content="#e021ff">
             <meta property="og:url" content="https://beam.ejnalo.me/@${profile.name}">
             <meta property="og:type" content="profile">
         </head>
