@@ -10,7 +10,7 @@ import type { Session } from '../db/models/auth.js';
 import type { PartialProfile, Settings, Relations } from '../db/models/profiles.js';
 import type { PartialPost, Post } from '../db/models/interactions.js';
 import type { File } from '../db/models/drive.js';
-import type { Inbox, NotificationSingle } from '../db/models/inbox.js';
+import type { PartialInbox, PartialNotificationSingle } from '../db/models/inbox.js';
 
 const router = Router();
 
@@ -255,8 +255,8 @@ router.post('/:name/follow', async (req: Request, res: Response) => {
         let relations: Relations | undefined;
         relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ profile.id ]) as Relations;
 
-        let inbox: Inbox | undefined;
-        inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ profile.id ]) as Inbox;
+        let inbox: PartialInbox | undefined;
+        inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ profile.id ]) as PartialInbox;
 
         let settings: Settings | undefined;
         settings = await db.get('SELECT * FROM Settings WHERE id = $1;', [ profile.id ]) as Settings;
@@ -280,7 +280,7 @@ router.post('/:name/follow', async (req: Request, res: Response) => {
                 my_relations.following.push(profile.id);
                 await db.run('UPDATE Relations SET following = $1 WHERE id = $2;', [ my_relations.following, author.id ]);
 
-                const new_notif: NotificationSingle = {
+                const new_notif: PartialNotificationSingle = {
                     id: genChar(12, 'hex').toUpperCase(),
                     date: new Date(),
                     type: 'follow',
@@ -390,8 +390,8 @@ router.post('/:name/accept/follow', async (req: Request, res: Response) => {
         let my_relations: Relations | undefined;
         my_relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ author.id ]) as Relations;
 
-        let my_inbox: Inbox | undefined;
-        my_inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ author.id ]) as Inbox;
+        let my_inbox: PartialInbox | undefined;
+        my_inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ author.id ]) as PartialInbox;
 
 
         let profile: PartialProfile | undefined;
@@ -405,8 +405,8 @@ router.post('/:name/accept/follow', async (req: Request, res: Response) => {
         let relations: Relations | undefined;
         relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ profile.id ]) as Relations;
 
-        let inbox: Inbox | undefined;
-        inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ profile.id ]) as Inbox;
+        let inbox: PartialInbox | undefined;
+        inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ profile.id ]) as PartialInbox;
 
         if (relations.blocklist.includes(session.id) || relations.blocklist.includes(session.ip || '')) {
             res.status(404).json({ message: 'UserNotFound' });
@@ -429,7 +429,7 @@ router.post('/:name/accept/follow', async (req: Request, res: Response) => {
                 my_inbox.requests.followers.filter(id => (id !== profile.id));
             await db.run('UPDATE Inbox SET requests = $1 WHERE id = $2;', [ my_inbox.requests, author.id ]);
 
-            const new_notif: NotificationSingle = {
+            const new_notif: PartialNotificationSingle = {
                 id: genChar(12, 'hex').toUpperCase(),
                 date: new Date(),
                 type: 'accept_follow',

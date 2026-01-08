@@ -10,7 +10,7 @@ import { convertPost, convertProfile } from '../utils/converters.js';
 import type { Session } from '../db/models/auth.js';
 import type { PartialPost, Post } from '../db/models/interactions.js';
 import type { PartialProfile, Settings, Relations, Tastes } from '../db/models/profiles.js';
-import type { Inbox, NotificationSingle, NotificationPost } from '../db/models/inbox.js';
+import type { PartialInbox, PartialNotificationSingle, PartialNotificationPost } from '../db/models/inbox.js';
 
 const router = Router();
 
@@ -113,7 +113,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
 
         let post: any;
-        post = await db.get('SELECT * FROM Posts WHERE name = $1;', [ id ]);
+        post = await db.get('SELECT * FROM Posts WHERE id = $1;', [ id ]);
 
         if (!post) {
             res.status(404).json({ message: 'PostNotFound' });
@@ -203,10 +203,10 @@ router.post('/:id/like', async (req: Request, res: Response) => {
             tastes.likes.push(post.id)
             post.likes += 1
 
-            let inbox: Inbox | undefined;
-            inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ profile.id ]) as Inbox;
+            let inbox: PartialInbox | undefined;
+            inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ profile.id ]) as PartialInbox;
 
-            const new_notif: NotificationPost = {
+            const new_notif: PartialNotificationPost = {
                 id: genChar(12, 'hex').toUpperCase(),
                 date: new Date(),
                 type: 'like',
@@ -375,9 +375,9 @@ router.post('/new', async (req: Request, res: Response) => {
                 return
             }
 
-            const parent_inbox: Inbox | undefined = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ parent_author!.id ]) as Inbox;
+            const parent_inbox: PartialInbox | undefined = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ parent_author!.id ]) as PartialInbox;
 
-            const new_notif: NotificationPost = {
+            const new_notif: PartialNotificationPost = {
                 id: genChar(12, 'hex').toUpperCase(),
                 date: new Date(),
                 type: 'repost',

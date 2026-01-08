@@ -9,7 +9,7 @@ import { can_access, genChar } from '../utils/functions.js';
 import type { Session } from '../db/models/auth.js';
 import type { PartialPost, PartialComment, Comment, Post } from '../db/models/interactions.js';
 import type { PartialProfile, Settings, Relations, Tastes } from '../db/models/profiles.js';
-import type { Inbox, NotificationPost, NotificationSingle } from '../db/models/inbox.js';
+import type { PartialInbox, PartialNotificationPost, NotificationSingle } from '../db/models/inbox.js';
 import { convertComment, convertPost, convertProfile } from '../utils/converters.js';
 
 const router = Router();
@@ -438,9 +438,9 @@ router.post('/new', async (req: Request, res: Response) => {
                     return
                 }
 
-                const parent_inbox: Inbox | undefined = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ parent_author!.id ]) as Inbox;
+                const parent_inbox: PartialInbox | undefined = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ parent_author!.id ]) as PartialInbox;
 
-                const new_notif: NotificationPost = {
+                const new_notif: PartialNotificationPost = {
                     id: genChar(12, 'hex').toUpperCase(),
                     date: new Date(),
                     type: 'answer_comment',
@@ -455,9 +455,9 @@ router.post('/new', async (req: Request, res: Response) => {
                 await db.run('UPDATE Inbox SET other = $1 WHERE id = $2;', [ parent_inbox.other, parent_author!.id ])
             }
 
-            const post_inbox: Inbox | undefined = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ post_author!.id ]) as Inbox;
+            const post_inbox: PartialInbox | undefined = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ post_author!.id ]) as PartialInbox;
 
-            const new_notif: NotificationPost = {
+            const new_notif: PartialNotificationPost = {
                 id: genChar(12, 'hex').toUpperCase(),
                 date: new Date(),
                 type: 'answer_comment',

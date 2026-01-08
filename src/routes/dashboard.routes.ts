@@ -9,9 +9,9 @@ import { can_access } from '../utils/functions.js';
 import { convertPost, convertProfile } from '../utils/converters.js';
 
 import type { Session } from '../db/models/auth.js';
-import type { PartialProfile, Settings, Relations, Tastes } from '../db/models/profiles.js'
+import type { PartialProfile, Profile, Settings, Relations, Tastes } from '../db/models/profiles.js'
 import type { PartialPost } from '../db/models/interactions.js';
-import type { Inbox } from '../db/models/inbox.js';
+import type { PartialInbox, PartialNotification } from '../db/models/inbox.js';
 import type { Notification } from '../db/models/inbox.js';
 
 const router = Router();
@@ -73,43 +73,50 @@ router.get('/inbox', async (req: Request, res: Response) => {
             return
         }
 
-        let inbox: Inbox | undefined;
-        inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ session.account ]) as Inbox;
+        let inbox: PartialInbox | undefined;
+        inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ session.account ]) as PartialInbox;
 
         const new_inbox = {
             id: inbox.id,
             read: [] as Notification[],
             unread: [] as Notification[],
             requests: {
-                children: [] as string[],
-                following: [] as string[],
-                followers: [] as string[]
+                children: [] as Profile[],
+                following: [] as Profile[],
+                followers: [] as Profile[]
             }
         }
 
         for (const u of inbox.requests.children) {
             const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as PartialProfile;
 
-            new_inbox.requests.children.push(_user.name);
+            new_inbox.requests.children.push(convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations));
         }
 
         for (const u of inbox.requests.following) {
             const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as PartialProfile;
 
-            new_inbox.requests.following.push(_user.name);
+            new_inbox.requests.following.push(convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations));
         }
 
         for (const u of inbox.requests.followers) {
             const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as PartialProfile;
 
-            new_inbox.requests.followers.push(_user.name);
+            new_inbox.requests.followers.push(convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations));
         }
 
         for (const n of inbox.other) {
+            let new_n: Notification = { ...n } as Notification;
+
+            if (n.author) {
+                const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ n.author ]) as PartialProfile;
+                new_n.author = convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations);
+            }
+
             if (n.read) {
-                new_inbox.read.push(n);
+                new_inbox.read.push(new_n);
             } else {
-                new_inbox.unread.push(n);
+                new_inbox.unread.push(new_n);
             }
         }
 
