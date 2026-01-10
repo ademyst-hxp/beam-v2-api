@@ -8,7 +8,7 @@ import { can_access, genChar } from '../utils/functions.js';
 
 import type { Session } from '../db/models/auth.js';
 import type { PartialPost, PartialComment, Comment, Post } from '../db/models/interactions.js';
-import type { PartialProfile, Settings, Relations, Tastes } from '../db/models/profiles.js';
+import type { Badge, PartialProfile, Settings, Relations, Tastes } from '../db/models/profiles.js';
 import type { PartialInbox, PartialNotificationPost, NotificationSingle } from '../db/models/inbox.js';
 import { convertComment, convertPost, convertProfile } from '../utils/converters.js';
 
@@ -52,6 +52,8 @@ router.get('/:id', async (req: Request, res: Response) => {
         let settings: Settings | undefined;
         settings = await db.get('SELECT * FROM Settings WHERE id = $1;', [ _profile.id ]) as Settings;
 
+        const badge: Badge | null = _profile.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ _profile.badge ]) as Badge : null;
+
         const is_visible = (field: string) => can_access(field, _profile, relations, session)
 
         if (!is_visible(settings.privacy.birthday)) {
@@ -86,14 +88,12 @@ router.get('/:id', async (req: Request, res: Response) => {
         }
 
 
-        let { author_id, post_id, tags, flags, ...__without_id } = comment
-
         const answers = await db.get(`SELECT COUNT(*) FROM Posts WHERE parent_id = $1;`, [ id ]);
 
         const reposts = await db.get(`SELECT COUNT(*) FROM Posts WHERE parent_id = $1;`, [ comment.post_id ]);
         const comments = await db.get(`SELECT COUNT(*) FROM Comments WHERE post_id = $1;`, [ comment.post_id ]);
 
-        const profile = convertProfile(_profile, relations);
+        const profile = convertProfile(_profile, relations, badge);
         const post = convertPost(
             _post,
             {
@@ -378,6 +378,8 @@ router.post('/new', async (req: Request, res: Response) => {
             return
         }
 
+        const badge: Badge | null = author.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ author.badge ]) as Badge : null;
+
         const post: PartialPost | undefined = answers_to ? await db.get('SELECT * FROM Posts WHERE id = $1;', [ post_id ]) as PartialPost : undefined;
         const post_author: PartialProfile | undefined = post ? await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as PartialProfile : undefined;
 
@@ -390,6 +392,8 @@ router.post('/new', async (req: Request, res: Response) => {
             res.status(403).json({ message: 'PostIsPrivate' });
             return
         }
+
+        const post_badge: Badge | null = post_author.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ post_author.badge ]) as Badge : null;
 
 
         const parent: PartialComment | undefined = answers_to ? await db.get('SELECT * FROM Comments WHERE id = $1;', [ answers_to ]) as PartialComment : undefined;
@@ -486,9 +490,9 @@ router.post('/new', async (req: Request, res: Response) => {
             convertPost(
                 post,
                 { reposts: 0, comments: 0 },
-                convertProfile(author, post_relations)
+                convertProfile(post_author, post_relations, post_badge)
             ),
-            convertProfile(author, relations)
+            convertProfile(author, relations, badge)
         )
 
         res.status(200).json(data)

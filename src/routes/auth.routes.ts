@@ -320,12 +320,13 @@ router.post('/signup', async (req: Request, res: Response) => {
             birthday: birthday ? birthday : null,
             pronouns: null,
             account_type: null,
+            badge: null,
             level: 3,
             flags: []
         };
 
         try {
-            await db.run('INSERT INTO Users (id, name, display_name, creation_date, update_date, status, description, birthday, pronouns, account_type, level, flags) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)', Object.values(profile));
+            await db.run('INSERT INTO Users (id, name, display_name, creation_date, update_date, status, description, birthday, pronouns, account_type, badge, level, flags) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)', Object.values(profile));
         } catch (err) {
             console.error(err);
             await db.run('DELETE FROM Inbox WHERE id = $1', [ account.id ]);

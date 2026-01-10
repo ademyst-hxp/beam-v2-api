@@ -1,11 +1,12 @@
-import type { PartialProfile, Profile, Relations } from "@/db/models/profiles.js";
+import type { Badge, PartialProfile, Profile, Relations } from "@/db/models/profiles.js";
 import type { PartialPost, Post, PartialComment, Comment } from "@/db/models/interactions.js";
 
-export const convertProfile = (profile: PartialProfile, relations: Relations): Profile => {
+export const convertProfile = (profile: PartialProfile, relations: Relations, badge: Badge | null): Profile => {
     let { flags, ...p } = profile
 
     return {
         ...p,
+        badge: badge,
         followers: relations.followers.length,
         following: relations.following.length
     }

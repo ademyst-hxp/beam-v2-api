@@ -35,6 +35,21 @@ await db.run(`CREATE TABLE Sudo (
     FOREIGN KEY (account) REFERENCES Logins(id)
 )`);
 
+console.log('Creating table Entitlements');
+await db.run(`CREATE TABLE Entitlements (
+    id              TEXT UNIQUE NOT NULL PRIMARY KEY,
+    account         TEXT NOT NULL,
+	granted_by	    TEXT NOT NULL,
+	granted_at      TIMESTAMPTZ NOT NULL,
+	expires_at 	    TIMESTAMPTZ NOT NULL,
+	revoked		    BOOLEAN NOT NULL,
+    reward_type     TEXT NOT NULL,
+	reward_id       TEXT NOT NULL,
+	reason		    TEXT,
+
+    FOREIGN KEY (account) REFERENCES Logins(id)
+)`);
+
 /************************************/
 // PROFILS ET RELATIONS
 

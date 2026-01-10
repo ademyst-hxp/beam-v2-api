@@ -6,7 +6,7 @@ import { db } from '../db/index.js';
 import { can_access, convert } from '../utils/functions.js';
 
 import type { Session } from '../db/models/auth.js';
-import type { PartialProfile, Profile, Relations, Tastes } from '../db/models/profiles.js'
+import type { Badge, PartialProfile, Profile, Relations, Tastes } from '../db/models/profiles.js'
 import { PartialPost, Post } from '../db/models/interactions.js';
 import { convertPost, convertProfile } from '../utils/converters.js';
 
@@ -19,8 +19,9 @@ router.get('/users', async (req: Request, res: Response) => {
 
         for (const u of _result) {
             const relations: Relations | undefined = await db.get('SELECT * FROM Relations WHERE id = $1;', [ u.id ]) as Relations;
+            const badge: Badge | null = u.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ u.badge ]) as Badge : null;
 
-            let new_u: Profile = convertProfile(u, relations);
+            let new_u: Profile = convertProfile(u, relations, badge);
 
             users.push(new_u);
         }
@@ -72,6 +73,7 @@ router.get('/posts', async (req: Request, res: Response) => {
         for (const p of _result) {
             const profile: PartialProfile | undefined = await db.get('SELECT * FROM Users WHERE id = $1;', [ p.author_id ]) as PartialProfile;
             const relations: Relations | undefined = await db.get('SELECT * FROM Relations WHERE id = $1;', [ p.author_id ]) as Relations;
+            const badge: Badge | null = profile.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ profile.badge ]) as Badge : null;
 
             const is_visible = (field: string) => can_access(field, profile, relations, session)
 
@@ -81,7 +83,7 @@ router.get('/posts', async (req: Request, res: Response) => {
             let new_p: Post = convertPost(
                 p, 
                 { reposts: reposts.count, comments: comments.count },
-                convertProfile(profile, relations)
+                convertProfile(profile, relations, badge)
             )
 
             if (is_visible(p.visibility) && !my_relations.blocklist.includes(new_p.author.id)) {

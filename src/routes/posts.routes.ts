@@ -9,7 +9,7 @@ import { convertPost, convertProfile } from '../utils/converters.js';
 
 import type { Session } from '../db/models/auth.js';
 import type { PartialPost, Post } from '../db/models/interactions.js';
-import type { PartialProfile, Settings, Relations, Tastes } from '../db/models/profiles.js';
+import type { PartialProfile, Settings, Relations, Tastes, Badge } from '../db/models/profiles.js';
 import type { PartialInbox, PartialNotificationSingle, PartialNotificationPost } from '../db/models/inbox.js';
 
 const router = Router();
@@ -38,32 +38,34 @@ router.get('/:id', async (req: Request, res: Response) => {
             return
         }
 
-        let _profile: PartialProfile | undefined;
-        _profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as PartialProfile;
+        let profile: PartialProfile | undefined;
+        profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as PartialProfile;
 
-        if (!_profile) {
+        if (!profile) {
             res.status(403).json({ message: 'PrivateAccount' });
             return
         }
 
         let relations: Relations | undefined;
-        relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ _profile.id ]) as Relations;
+        relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ profile.id ]) as Relations;
 
         let settings: Settings | undefined;
-        settings = await db.get('SELECT * FROM Settings WHERE id = $1;', [ _profile.id ]) as Settings;
+        settings = await db.get('SELECT * FROM Settings WHERE id = $1;', [ profile.id ]) as Settings;
 
-        const is_visible = (field: string) => can_access(field, _profile, relations, session)
+        const badge: Badge | null = profile.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ profile.badge ]) as Badge : null;
+
+        const is_visible = (field: string) => can_access(field, profile, relations, session)
 
         if (!is_visible(settings.privacy.birthday)) {
-            _profile.birthday = null;
+            profile.birthday = null;
         }
 
         if (!is_visible(settings.privacy.status)) {
-            _profile.status = null;
+            profile.status = null;
         }
 
         if (!is_visible(settings.privacy.profile)) {
-            _profile.pronouns = null;
+            profile.pronouns = null;
         }
 
         if (!is_visible(post.visibility)) {
@@ -80,7 +82,7 @@ router.get('/:id', async (req: Request, res: Response) => {
                 reposts: parseInt(reposts.count),
                 comments: parseInt(comments.count)
             },
-            convertProfile(_profile, relations)
+            convertProfile(profile, relations, badge)
         )
 
         res.status(200).json(data)
@@ -339,6 +341,8 @@ router.post('/new', async (req: Request, res: Response) => {
         let relations: Relations | null;
         relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ session.account ]) as Relations;
 
+        const badge: Badge | null = author.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ author.badge ]) as Badge : null;
+
 
         const parent: PartialPost | undefined = answers_to ? await db.get('SELECT * FROM Posts WHERE id = $1;', [ answers_to ]) as PartialPost : undefined;
         const parent_author: PartialProfile | undefined = parent ? await db.get('SELECT * FROM Users WHERE id = $1;', [ parent.author_id ]) as PartialProfile : undefined;
@@ -397,7 +401,7 @@ router.post('/new', async (req: Request, res: Response) => {
         const data: Post = convertPost(
             post,
             { reposts: 0, comments: 0 },
-            convertProfile(author, relations)
+            convertProfile(author, relations, badge)
         )
 
         res.status(200).json(data)

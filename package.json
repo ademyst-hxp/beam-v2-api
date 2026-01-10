@@ -9,7 +9,9 @@
     "dev-seed": "tsx ./src/seed.ts",
     "build": "tsc",
     "start": "node .",
-    "seed": "docker exec -it HexapiumAPI node dist/seed/seed.js"
+    "seed": "docker exec -it HexapiumAPI node dist/seed/seed.js",
+    "cron:dev": "tsx ./src/cron.ts",
+    "cron": "node dist/cron.js"
   },
   "repository": {
     "type": "git",

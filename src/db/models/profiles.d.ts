@@ -1,3 +1,12 @@
+export type Badge = {
+	id: string
+	title: string
+	description: string
+	colors: Record<string, string | string[]>
+	icon: string
+	level: number
+}
+
 export type PartialProfile = {
 	id: string
 	name: string
@@ -11,6 +20,7 @@ export type PartialProfile = {
 	creation_date: Date
 	update_date: Date
 
+	badge: string | null
 	level: number
 	flags: string[]
 }
@@ -28,6 +38,7 @@ export type Profile = {
 	creation_date: Date
 	update_date: Date
 
+	badge: Badge | null
 	level: number
 
 	following: number

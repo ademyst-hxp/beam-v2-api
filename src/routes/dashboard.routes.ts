@@ -9,7 +9,7 @@ import { can_access } from '../utils/functions.js';
 import { convertPost, convertProfile } from '../utils/converters.js';
 
 import type { Session } from '../db/models/auth.js';
-import type { PartialProfile, Profile, Settings, Relations, Tastes } from '../db/models/profiles.js'
+import type { Badge, PartialProfile, Profile, Settings, Relations, Tastes } from '../db/models/profiles.js'
 import type { PartialPost } from '../db/models/interactions.js';
 import type { PartialInbox, PartialNotification } from '../db/models/inbox.js';
 import type { Notification } from '../db/models/inbox.js';
@@ -89,20 +89,23 @@ router.get('/inbox', async (req: Request, res: Response) => {
 
         for (const u of inbox.requests.children) {
             const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as PartialProfile;
+            const _badge: Badge | null = _user.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ _user.badge ]) as Badge : null;
 
-            new_inbox.requests.children.push(convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations));
+            new_inbox.requests.children.push(convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations, _badge));
         }
 
         for (const u of inbox.requests.following) {
             const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as PartialProfile;
+            const _badge: Badge | null = _user.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ _user.badge ]) as Badge : null;
 
-            new_inbox.requests.following.push(convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations));
+            new_inbox.requests.following.push(convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations, _badge));
         }
 
         for (const u of inbox.requests.followers) {
             const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as PartialProfile;
+            const _badge: Badge | null = _user.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ _user.badge ]) as Badge : null;
 
-            new_inbox.requests.followers.push(convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations));
+            new_inbox.requests.followers.push(convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations, _badge));
         }
 
         for (const n of inbox.other) {
@@ -110,7 +113,8 @@ router.get('/inbox', async (req: Request, res: Response) => {
 
             if (n.author) {
                 const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ n.author ]) as PartialProfile;
-                new_n.author = convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations);
+                const _badge: Badge | null = _user.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ _user.badge ]) as Badge : null;
+                new_n.author = convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations, _badge);
             }
 
             if (n.read) {
@@ -140,6 +144,11 @@ router.get('/settings', async (req: Request, res: Response) => {
 
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
+
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
 
         let settings: Settings | undefined;
         settings = await db.get('SELECT * FROM Settings WHERE id = $1;', [ session.account ]) as Settings;
@@ -199,6 +208,82 @@ router.put("/settings", async (req: Request, res: Response) => {
     }
 });
 
+router.get('/entitlements', async (req: Request, res: Response) => {
+    let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
+
+    let include_expired = req.query.include_expired === 'true' || false;
+    let include_revoked = req.query.include_revoked === 'true' || false;
+    let type = req.query.type as string | null;
+    let target = req.query.target as string | null;
+
+    try {
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
+
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
+        let entitlements;
+        entitlements = await db.all('SELECT * FROM Entitlements WHERE account = $1;', [ session.account ]);
+
+        entitlements = entitlements.filter((e: any) => {
+            if (!include_expired && new Date(e.expires_at) < new Date()) return false
+            if (!include_revoked && e.revoked) return false
+            if (type && e.reward_type !== type) return false
+            if (target && e.reward_id !== target) return false
+
+            return true
+        });
+
+        res.status(200).json(entitlements);
+        return
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error' });
+    }
+});
+
+router.get('/entitlements/badges', async (req: Request, res: Response) => {
+    let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
+
+    try {
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
+
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
+        let entitlements;
+        entitlements = await db.all('SELECT * FROM Entitlements WHERE account = $1;', [ session.account ]);
+
+        entitlements = entitlements.filter((e: any) => {
+            if (new Date(e.expires_at) < new Date()) return false
+            if (e.revoked) return false
+            if (e.reward_type !== 'badge') return false
+
+            return true
+        });
+
+        const badges: Badge[] = [];
+
+        for (const e of entitlements) {
+            const badge: Badge | null = await db.get('SELECT * FROM Badges WHERE id = $1;', [ e.reward_id ]) as Badge;
+
+            if (badge) {
+                badges.push(badge);
+            }
+        }
+
+        res.status(200).json(badges);
+        return
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error' });
+    }
+});
+
 router.put('/profile', async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
     const updates: Partial<PartialProfile> = req.body;
@@ -251,7 +336,26 @@ router.put('/profile', async (req: Request, res: Response) => {
             return
         }
 
-        await db.run('UPDATE Users SET name = $1, display_name = $2, pronouns = $3, account_type = $4, description = $5, status = $6, update_date = $7 WHERE id = $8;', [
+        let entitlements;
+        entitlements = await db.all('SELECT * FROM Entitlements WHERE account = $1;', [ session.account ]);
+
+        entitlements = entitlements.filter((e: any) => {
+            if (new Date(e.expires_at) < new Date()) return false
+            if (e.revoked) return false
+            if (e.reward_type !== 'badge') return false
+            if (e.reward_id !== new_profile.badge) return false
+
+            return true
+        });
+
+        console.log(entitlements, new_profile.badge);
+
+        if (new_profile.badge && !entitlements.length) {
+            new_profile.badge = null;
+        }
+
+
+        await db.run('UPDATE Users SET name = $1, display_name = $2, pronouns = $3, account_type = $4, description = $5, status = $6, update_date = $7, badge = $8 WHERE id = $9;', [
             new_profile.name,
             new_profile.display_name,
             new_profile.pronouns,
@@ -259,6 +363,7 @@ router.put('/profile', async (req: Request, res: Response) => {
             new_profile.description,
             new_profile.status,
             new Date(),
+            new_profile.badge,
             session.account
         ]);
 
@@ -348,6 +453,7 @@ router.get('/feed', async (req: Request, res: Response) => {
         for (const p of _result) {
             const profile: PartialProfile | undefined = await db.get('SELECT * FROM Users WHERE id = $1;', [ p.author_id ]) as PartialProfile;
             const relations: Relations | undefined = await db.get('SELECT * FROM Relations WHERE id = $1;', [ p.author_id ]) as Relations;
+            const badge: Badge | null = profile.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ profile.badge ]) as Badge : null;
 
             const is_visible = (field: string) => can_access(field, profile, relations, session)
 
@@ -360,7 +466,7 @@ router.get('/feed', async (req: Request, res: Response) => {
                     reposts: parseInt(reposts.count), 
                     comments: parseInt(comments.count)
                 },
-                convertProfile(profile, relations)
+                convertProfile(profile, relations, badge)
             );
 
             if (is_visible(p.visibility) && !my_relations.blocklist.includes(new_p.author.id)) {
