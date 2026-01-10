@@ -39,9 +39,13 @@ router.get('/', async (req: Request, res: Response) => {
         let tastes: Tastes | undefined;
         tastes = await db.get('SELECT * FROM Tastes WHERE id = $1;', [ session.account ]) as Tastes;
 
+        let badge: Badge | null = profile.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ profile.badge ]) as Badge : null;
+
+        let new_profile = convertProfile(profile, relations, badge);
+
         res.status(200).json({ 
-            profile: profile,
-            avatar: '/users/' + profile.name + '/avatar',
+            profile: new_profile,
+            avatar: '/users/' + new_profile.name + '/avatar',
             relations: relations,
             settings: settings,
             tastes: tastes,
