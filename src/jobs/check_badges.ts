@@ -10,7 +10,17 @@ export async function checkBadges() {
     for (const row of rows) {
         let user: Profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ row.id ]) as Profile;
 
-        let entitlements: any[] = await db.all('SELECT * FROM Entitlements WHERE account = $1 AND reward_type = $2 AND reward_id = $3 AND expires_at > $4 AND revoked = FALSE;', [ user.id, 'badge', user.badge, new Date() ]) as any[];
+        let entitlements: any[] = await db.all('SELECT * FROM Entitlements WHERE account = $1', [ user.id ]) as any[];
+
+        entitlements = entitlements.filter((e: any) => {
+            if (e.expires_at && new Date(e.expires_at) < new Date()) return false
+            if (e.revoked) return false
+            if (e.reward_type !== 'badge') return false
+            if (e.reward_id !== user.badge) return false
+
+            return true
+        });
+
         let badge: Badge | null = user.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ user.badge ]) as Badge : null;
 
         if (!badge) {

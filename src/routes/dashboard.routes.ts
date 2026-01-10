@@ -232,7 +232,7 @@ router.get('/entitlements', async (req: Request, res: Response) => {
         entitlements = await db.all('SELECT * FROM Entitlements WHERE account = $1;', [ session.account ]);
 
         entitlements = entitlements.filter((e: any) => {
-            if (!include_expired && new Date(e.expires_at) < new Date()) return false
+            if (!include_expired && e.expires_at && new Date(e.expires_at) < new Date()) return false
             if (!include_revoked && e.revoked) return false
             if (type && e.reward_type !== type) return false
             if (target && e.reward_id !== target) return false
@@ -262,8 +262,10 @@ router.get('/entitlements/badges', async (req: Request, res: Response) => {
         let entitlements;
         entitlements = await db.all('SELECT * FROM Entitlements WHERE account = $1;', [ session.account ]);
 
+        console.log(entitlements)
+
         entitlements = entitlements.filter((e: any) => {
-            if (new Date(e.expires_at) < new Date()) return false
+            if (e.expires_at && new Date(e.expires_at) < new Date()) return false
             if (e.revoked) return false
             if (e.reward_type !== 'badge') return false
 
@@ -277,6 +279,8 @@ router.get('/entitlements/badges', async (req: Request, res: Response) => {
 
             if (badge) {
                 badges.push(badge);
+            } else {
+                console.log("Badge not found:", e.reward_id);
             }
         }
 
@@ -306,7 +310,7 @@ router.put('/profile', async (req: Request, res: Response) => {
         if (
             new_profile.name.length < 3 ||
             new_profile.name.length > 24 ||
-            !/^[a-zA-Z0-9_]+$/.test(new_profile.name)
+            !/^[a-z0-9_]+$/.test(new_profile.name)
         ) {
             res.status(400).json({ message: 'InvalidProfileName' });
             return
@@ -344,7 +348,7 @@ router.put('/profile', async (req: Request, res: Response) => {
         entitlements = await db.all('SELECT * FROM Entitlements WHERE account = $1;', [ session.account ]);
 
         entitlements = entitlements.filter((e: any) => {
-            if (new Date(e.expires_at) < new Date()) return false
+            if (e.expires_at && new Date(e.expires_at) < new Date()) return false
             if (e.revoked) return false
             if (e.reward_type !== 'badge') return false
             if (e.reward_id !== new_profile.badge) return false
