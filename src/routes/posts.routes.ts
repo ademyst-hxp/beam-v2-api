@@ -353,7 +353,7 @@ router.post('/new', async (req: Request, res: Response) => {
         }
 
         /* Limitations & sécurité */
-        if (content.length > 5000) {
+        if (content.length > (author.level >= 4 ? 2000 : 500)) {
             res.status(413).json({ message: 'PostTooLong' })
         }
 
