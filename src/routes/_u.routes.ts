@@ -2,15 +2,11 @@ import { Router } from 'express';
 
 import type { Request, Response } from 'express';
 
-import { db, supabase } from '../db/index.js';
-import { can_access, genChar } from '../utils/functions.js';
-import { convertPost, convertProfile } from '../utils/converters.js';
+import { db } from '../db/index.js';
+import { can_access } from '../utils/functions.js';
 
 import type { Session } from '../db/models/auth.js';
 import type { PartialProfile, Settings, Relations } from '../db/models/profiles.js';
-import type { PartialPost, Post } from '../db/models/interactions.js';
-import type { File } from '../db/models/drive.js';
-import type { Inbox, NotificationSingle } from '../db/models/inbox.js';
 
 const router = Router();
 

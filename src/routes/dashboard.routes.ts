@@ -431,6 +431,8 @@ router.post('/avatar', avatar_upload.single('avatar'),async (req: Request, res: 
 
 router.get('/feed', async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
+    const offset = parseInt(req.query.offset as string) || 0;
+    const limit = parseInt(req.query.limit as string) || 20;
 
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
@@ -499,6 +501,8 @@ router.get('/feed', async (req: Request, res: Response) => {
 
         posts = posts.sort((a, b) => b.score - a.score);
         posts = posts.filter((p) => !my_tastes.likes.includes(p.id));
+        posts = posts.filter((p) => p.author.id != session!.account);
+        posts = posts.slice(offset, offset + limit);
 
         res.status(200).json({ posts: posts });
         return
