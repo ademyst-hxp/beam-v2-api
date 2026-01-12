@@ -78,7 +78,8 @@ await db.run(`CREATE TABLE Users (
 	update_date     DATE NOT NULL,
 
 	level           INTEGER NOT NULL DEFAULT 3,
-	flags           TEXT[] NOT NULL DEFAULT '{}',
+	badge           TEXT,
+	flags           TEXT[] NOT NULL DEFAULT '{}'::text[],
 
     FOREIGN KEY (id) REFERENCES Logins(id)
 )`);
@@ -99,7 +100,7 @@ console.log('Creating table Inbox');
 await db.run(`CREATE TABLE Inbox (
     id               TEXT UNIQUE NOT NULL PRIMARY KEY,
 	requests		 JSONB NOT NULL DEFAULT '{"children":[],"following":[],"followers":[]}'::jsonb,
-	other    		 JSONB[] NOT NULL DEFAULT '[]'::jsonb[],
+	other    		 JSONB[] NOT NULL DEFAULT '{}'::jsonb[],
 
     FOREIGN KEY (id) REFERENCES Logins(id)
 )`);
@@ -107,11 +108,11 @@ await db.run(`CREATE TABLE Inbox (
 console.log('Creating table Relations');
 await db.run(`CREATE TABLE Relations (
     id               TEXT UNIQUE NOT NULL PRIMARY KEY,
-	blocklist        TEXT[] NOT NULL DEFAULT '{}',
-	following        TEXT[] NOT NULL DEFAULT '{}',
-	followers        TEXT[] NOT NULL DEFAULT '{}',
-	friends          TEXT[] NOT NULL DEFAULT '{}',
-	children         TEXT[] NOT NULL DEFAULT '{}',
+	blocklist        TEXT[] NOT NULL DEFAULT '{}'::text[],
+	following        TEXT[] NOT NULL DEFAULT '{}'::text[],
+	followers        TEXT[] NOT NULL DEFAULT '{}'::text[],
+	friends          TEXT[] NOT NULL DEFAULT '{}'::text[],
+	children         TEXT[] NOT NULL DEFAULT '{}'::text[],
 	parent           TEXT,
 
     FOREIGN KEY (id) REFERENCES Logins(id)
@@ -120,8 +121,8 @@ await db.run(`CREATE TABLE Relations (
 console.log('Creating table Tastes');
 await db.run(`CREATE TABLE Tastes (
     id               TEXT UNIQUE NOT NULL PRIMARY KEY,
-	likes            TEXT[] NOT NULL DEFAULT '{}',
-	hashtags         TEXT[] NOT NULL DEFAULT '{}',
+	likes            TEXT[] NOT NULL DEFAULT '{}'::text[],
+	hashtags         TEXT[] NOT NULL DEFAULT '{}'::text[],
 
     FOREIGN KEY (id) REFERENCES Logins(id)
 )`);
@@ -133,15 +134,15 @@ await db.run(`CREATE TABLE Posts (
 	parent_id        TEXT,
 
 	content          TEXT NOT NULL,
-	attachments      TEXT[] NOT NULL DEFAULT '{}',
+	attachments      TEXT[] NOT NULL DEFAULT '{}'::text[],
 
 	visibility       TEXT NOT NULL,
 	creation_date	 TIMESTAMPTZ NOT NULL,
 	update_date	     TIMESTAMPTZ,
 
 	likes            INTEGER NOT NULL,
-	tags			 TEXT[] NOT NULL DEFAULT '{}',
-	flags			 TEXT[] NOT NULL DEFAULT '{}',
+	tags			 TEXT[] NOT NULL DEFAULT '{}'::text[],
+	flags			 TEXT[] NOT NULL DEFAULT '{}'::text[],
 
 	FOREIGN KEY (author_id) REFERENCES Users(id)
 )`);
@@ -160,7 +161,7 @@ await db.run(`CREATE TABLE Comments (
 	update_date	     TIMESTAMPTZ,
 
 	likes            INTEGER NOT NULL,
-	flags			 TEXT[] NOT NULL DEFAULT '{}',
+	flags			 TEXT[] NOT NULL DEFAULT '{}'::text[],
 
 	FOREIGN KEY (author_id) REFERENCES Users(id),
 	FOREIGN KEY (post_id) REFERENCES Posts(id),
@@ -182,3 +183,40 @@ await db.run(`CREATE TABLE Files (
 
 	FOREIGN KEY (author_id) REFERENCES Users(id)
 )`);
+
+/************************************/
+// MODERATION
+
+console.log('Creating table Reports');
+await db.run(`CREATE TABLE Reports (
+	id               TEXT UNIQUE NOT NULL PRIMARY KEY,
+	reporter_id      TEXT NOT NULL,
+	target_type      TEXT NOT NULL,
+	target_id        TEXT NOT NULL,
+	categories		 TEXT[] NOT NULL DEFAULT '{}'::text[],
+	reason           TEXT NOT NULL,
+	reported_at		 TIMESTAMPTZ NOT NULL,
+	status           TEXT NOT NULL,
+	resolved_at      TIMESTAMPTZ,
+	resolved_by      TEXT,
+
+	FOREIGN KEY (reporter_id) REFERENCES Users(id),
+	FOREIGN KEY (resolved_by) REFERENCES Users(id)
+)`);
+
+console.log('Creating table Sanctions');
+await db.run(`CREATE TABLE Sanctions (
+	id               TEXT UNIQUE NOT NULL PRIMARY KEY,
+	target_id        TEXT NOT NULL,
+	issued_by        TEXT NOT NULL,
+	reason           TEXT NOT NULL,
+	sanction_type    TEXT NOT NULL,
+	issued_at        TIMESTAMPTZ NOT NULL,
+	expires_at       TIMESTAMPTZ,
+	active           BOOLEAN NOT NULL,
+
+	FOREIGN KEY (target_id) REFERENCES Users(id),
+	FOREIGN KEY (issued_by) REFERENCES Users(id)
+)`);
+
+console.log('Database schema created successfully.');

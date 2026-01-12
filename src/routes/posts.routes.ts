@@ -125,10 +125,11 @@ router.delete('/:id', async (req: Request, res: Response) => {
         let profile: PartialProfile | undefined;
         profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as PartialProfile;
 
-        if (author.level >= 4 || (profile && post.id == profile.id)) {
+        if (author.level >= 4 || (profile && post.author_id == profile.id)) {
             await db.run('DELETE FROM Posts WHERE id = $1;', [ id ]);
         } else {
-            res.status(403).json({ message: 'Forbidden' })
+            res.status(403).json({ message: 'Forbidden' });
+            return;
         }
 
         res.status(200).json({ message: 'Success' })

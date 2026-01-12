@@ -6,10 +6,10 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch ./src/index.ts",
-    "dev-seed": "tsx ./src/seed.ts",
+    "dev-seed": "tsx ./src/db/seed.ts",
     "build": "tsc",
     "start": "node .",
-    "seed": "docker exec -it HexapiumAPI node dist/seed/seed.js",
+    "seed": "docker exec -it HexapiumAPI node dist/db/seed.js",
     "cron:dev": "tsx ./src/cron.ts",
     "cron": "node dist/cron.js"
   },
