@@ -89,6 +89,7 @@ router.get('/:name/avatar.png', async (req: Request, res: Response) => {
                 path: '/avatars/DefaultAvatar.png',
                 type: 'image/png',
                 visibility: 'everyone',
+                ephemeral: false,
                 creation_date: new Date(),
                 update_date: null
             }
@@ -104,29 +105,18 @@ router.get('/:name/avatar.png', async (req: Request, res: Response) => {
 
         const is_visible = (field: string) => can_access(field, _profile, relations, session)
 
-        /*if (!is_visible(settings.privacy.profile)) {
+        if (!is_visible(settings.privacy.profile)) {
             _file = {
                 id: _profile.id,
                 author_id: _profile.id,
                 path: '/avatars/DefaultAvatar.png',
                 type: 'image/png',
                 visibility: 'everyone',
+                ephemeral: false,
                 creation_date: new Date(),
                 update_date: null
             }
         }
-
-        if (!is_visible(_file.visibility)) {
-            _file = {
-                id: _profile.id,
-                author_id: _profile.id,
-                path: '/avatars/DefaultAvatar.png',
-                type: 'image/png',
-                visibility: 'everyone',
-                creation_date: new Date(),
-                update_date: null
-            }
-        }*/
 
         const { data, error } = await supabase.storage
             .from('profiles')

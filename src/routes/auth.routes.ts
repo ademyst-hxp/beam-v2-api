@@ -151,7 +151,8 @@ router.post('/sudo', async (req: Request, res: Response) => {
                 user_generated: true
             };
 
-            await db.run("INSERT INTO Sudo (created_at, token, action, account, __expires, user_generated) VALUES ($1, $2, $3, $4, $5, $6)", [
+            await db.run("INSERT INTO Sudo (id, created_at, token, action, account, __expires, user_generated) VALUES ($1, $2, $3, $4, $5, $6, $7)", [
+                randomUUID(),
                 sudo.created_at,
                 sudo.token,
                 sudo.action,
@@ -234,11 +235,15 @@ router.post('/signup', async (req: Request, res: Response) => {
             },
             appearance: {
                 global_theme: 'light',
+            },
+            feed: {
+                posts_feed: 'trending',
+                users_feed: 'trending'
             }
         }
 
         try {
-            await db.run('INSERT INTO Settings (id, privacy, appearance) VALUES ($1, $2, $3)', Object.values(settings));
+            await db.run('INSERT INTO Settings (id, privacy, appearance, feed) VALUES ($1, $2, $3, $4)', Object.values(settings));
         } catch (err) {
             console.error(err);
             await db.run('DELETE FROM Logins WHERE id = $1', [ account.id ]);
@@ -416,7 +421,7 @@ router.post('/email-reset', async (req: Request, res: Response) => {
 });
 
 router.post('/delete', async (req: Request, res: Response) => {
-    let token: string = req.cookies.token;
+    let token: string = req.cookies.token ? req.cookies.token : req.body.token;
 
     try {
         let result: Record<string, any> | undefined = await db.get('SELECT * FROM Sudo WHERE token = $1', [ token ]) as Object;
@@ -433,26 +438,12 @@ router.post('/delete', async (req: Request, res: Response) => {
         }
 
         if (result.action !== 'delete-account') {
-            console.log('Invalid action for token:', result.action);
             res.status(401).json({ message: 'InvalidToken' });
             return
         }
 
-        await db.run('DELETE FROM Logins WHERE id = $1', [ result.id ]);
-
-        const followers = await db.all('SELECT id FROM Relations WHERE $1 = ANY(following);', [ result.account ]) as Relations[];
-
-        for (const f of followers) {
-            f.following = f.following.filter((id) => id !== result.account);
-            await db.run('UPDATE Relations SET following = $1 WHERE id = $2;', [ f.following, f.id ]);
-        }
-
-        const following = await db.all('SELECT id FROM Relations WHERE $1 = ANY(following);', [ result.account ]) as Relations[];
-
-        for (const f of following) {
-            f.followers = f.followers.filter((id) => id !== result.account);
-            await db.run('UPDATE Relations SET followers = $1 WHERE id = $2;', [ f.followers, f.id ]);
-        }
+        // Delete from Logins - ON DELETE CASCADE handles all related tables
+        await db.run('DELETE FROM Logins WHERE id = $1', [ result.account ]);
 
         res.status(200).json({ message: 'Success' });
     } catch (err) {

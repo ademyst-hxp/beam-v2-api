@@ -11,7 +11,7 @@ import { convertPost, convertProfile } from '../utils/converters.js';
 import type { Session } from '../db/models/auth.js';
 import type { Badge, PartialProfile, Profile, Settings, Relations, Tastes } from '../db/models/profiles.js'
 import type { PartialPost } from '../db/models/interactions.js';
-import type { PartialInbox, PartialNotification } from '../db/models/inbox.js';
+import type { PartialInbox } from '../db/models/inbox.js';
 import type { Notification } from '../db/models/inbox.js';
 
 const router = Router();

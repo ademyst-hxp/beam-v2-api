@@ -312,6 +312,102 @@ router.delete('/:id/like', async (req: Request, res: Response) => {
     }
 });
 
+router.post('/:id/report', async (req: Request, res: Response) => {
+    const id = req.params.id
+
+    const reason: string = req.body.reason || '';
+    const categories: string[] = req.body.categories.split(',') || [];
+    const details: string = req.body.details || '';
+
+    let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
+
+    try {
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
+
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
+        let author: PartialProfile | null;
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
+
+        if (!author) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
+
+        let post: any;
+        post = await db.get('SELECT * FROM Posts WHERE id = $1;', [ id ]);
+
+        if (!post) {
+            res.status(404).json({ message: 'PostNotFound' });
+            return
+        }
+
+
+        if (reason.length > 1000 || details.length > 5000) {
+            res.status(413).json({ message: 'ReportTooLong' })
+            return
+        }
+
+        if (categories.length > 5) {
+            res.status(413).json({ message: 'TooManyCategories' })
+            return
+        }
+
+        if (categories.length == 0) {
+            res.status(400).json({ message: 'NoCategories' })
+            return
+        }
+
+
+        let report: Record<string, any> = {
+            id: genChar(12, 'hex').toUpperCase(),
+            reporter_id: author.id,
+            target_type: 'post',
+            target_id: post.id,
+            categories: categories,
+            reason: reason,
+            reported_at: new Date(),
+            status: 'open',
+            details: details,
+            resolved_at: null,
+            resolved_by: null
+        }
+
+        await db.run('INSERT INTO Reports (id, reporter_id, target_type, target_id, categories, reason, reported_at, status, details, resolved_at, resolved_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)', Object.values(report));
+
+        if (categories.includes('security.self.age')) {
+            await db.run('UPDATE Users SET level = $1 WHERE id = $2;', [ 2, post.author_id ]);
+        }
+
+
+        let inbox: PartialInbox | undefined;
+        inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ author.id ]) as PartialInbox;
+
+        const new_notif: PartialNotificationPost = {
+            id: report.id,
+            date: new Date(),
+            type: 'post_report_confirmation',
+            isGroupable: false,
+            read: false,
+            author: '0',
+            target: post.id,
+        }
+
+        inbox.other.unshift(new_notif)        
+
+        await db.run('UPDATE Inbox SET other = $1 WHERE id = $2;', [ inbox.other, author.id ])
+
+        res.status(200).json({ message: 'Success' })
+    } catch(err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error' });
+    }
+});
+
 
 /**********************************/
 
@@ -354,7 +450,7 @@ router.post('/new', async (req: Request, res: Response) => {
         }
 
         /* Limitations & sécurité */
-        if (content.length > (author.level >= 4 ? 2000 : 500)) {
+        if (content.length > (author.level >= 5 ? 2000 : author.level >= 4 ? 1000 : 500)) {
             res.status(413).json({ message: 'PostTooLong' })
         }
 

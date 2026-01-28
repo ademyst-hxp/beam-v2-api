@@ -55,6 +55,10 @@ export type Settings = {
 	}
 	appearance: {
 		global_theme: string
+	},
+	feed: {
+		posts_feed: "trending" | "following" | "top" | "latest"
+		users_feed: "trending" | "top"
 	}
 }
 
