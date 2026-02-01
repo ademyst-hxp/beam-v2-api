@@ -5,10 +5,10 @@ import he from 'he'
 
 import { db } from '../db/index.js';
 import { can_access, genChar } from '../utils/functions.js';
-import { convertPost, convertProfile } from '../utils/converters.js';
+import { convertComment, convertPost, convertProfile } from '../utils/converters.js';
 
 import type { Session } from '../db/models/auth.js';
-import type { PartialPost, Post } from '../db/models/interactions.js';
+import type { Comment, PartialComment, PartialPost, Post } from '../db/models/interactions.js';
 import type { PartialProfile, Settings, Relations, Tastes, Badge } from '../db/models/profiles.js';
 import type { PartialInbox, PartialNotificationSingle, PartialNotificationPost } from '../db/models/inbox.js';
 
@@ -125,7 +125,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
         let profile: PartialProfile | undefined;
         profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as PartialProfile;
 
-        if (author.level >= 4 || (profile && post.author_id == profile.id)) {
+        if (author.level >= 6 || (profile && post.author_id == profile.id)) {
             await db.run('DELETE FROM Posts WHERE id = $1;', [ id ]);
         } else {
             res.status(403).json({ message: 'Forbidden' });
@@ -408,6 +408,61 @@ router.post('/:id/report', async (req: Request, res: Response) => {
     }
 });
 
+router.get('/:id/comments', async (req: Request, res: Response) => {
+    const id = req.params.id
+
+    let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
+
+    try {
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
+
+        let post: PartialPost | null;
+        post = await db.get('SELECT * FROM Posts WHERE id = $1;', [ id ]) as PartialPost;
+
+        if (!post) {
+            res.status(404).json({ message: 'PostNotFound' });
+            return
+        }
+
+        const profile: PartialProfile | undefined = await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as PartialProfile;
+        const relations: Relations | undefined = await db.get('SELECT * FROM Relations WHERE id = $1;', [ post.author_id ]) as Relations;
+        const badge: Badge | null = profile.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ profile.badge ]) as Badge : null;
+
+        let comments: Comment[] = [];
+        let _result: PartialComment[] = await db.all('SELECT * FROM Comments WHERE post_id = $1 ORDER BY creation_date DESC;', [ id ]) as PartialComment[];
+
+        for (const c of _result) {
+            const __profile: PartialProfile | undefined = await db.get('SELECT * FROM Users WHERE id = $1;', [ c.author_id ]) as PartialProfile;
+            const __relations: Relations | undefined = await db.get('SELECT * FROM Relations WHERE id = $1;', [ c.author_id ]) as Relations;
+            const __badge: Badge | null = __profile.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ __profile.badge ]) as Badge : null;
+
+            const is_visible = (field: string) => can_access(field, profile, relations, session)
+
+            if (is_visible(c.visibility) && !relations.blocklist.includes(session?.account)) {
+                let new_c: Comment = convertComment(
+                    c,
+                    { answers: (await db.get(`SELECT COUNT(*) FROM Comments WHERE parent_id = $1;`, [ c.id ])).count },
+                    convertPost(
+                        post,
+                        {
+                            reposts: (await db.get(`SELECT COUNT(*) FROM Posts WHERE parent_id = $1;`, [ post.id ])).count,
+                            comments: (await db.get(`SELECT COUNT(*) FROM Comments WHERE post_id = $1;`, [ post.id ])).count
+                        },
+                        convertProfile(profile, relations, badge)
+                    ),
+                    convertProfile(__profile, __relations, __badge)
+                )
+
+                comments.push(new_c)
+            }
+        }
+
+        res.status(200).json(comments)
+    } catch(err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error' });
+    }
+});
 
 /**********************************/
 

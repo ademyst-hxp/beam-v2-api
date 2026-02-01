@@ -9,7 +9,7 @@ import { can_access, genChar } from '../utils/functions.js';
 import type { Session } from '../db/models/auth.js';
 import type { PartialPost, PartialComment, Comment, Post } from '../db/models/interactions.js';
 import type { Badge, PartialProfile, Settings, Relations, Tastes } from '../db/models/profiles.js';
-import type { PartialInbox, PartialNotificationPost, NotificationSingle } from '../db/models/inbox.js';
+import type { PartialInbox, PartialNotificationPost, NotificationSingle, PartialNotificationComment } from '../db/models/inbox.js';
 import { convertComment, convertPost, convertProfile } from '../utils/converters.js';
 
 const router = Router();
@@ -141,18 +141,18 @@ router.delete('/:id', async (req: Request, res: Response) => {
         }
 
 
-        let post: any;
-        post = await db.get('SELECT * FROM Posts WHERE name = $1;', [ id ]);
+        let comment: any;
+        comment = await db.get('SELECT * FROM Comments WHERE id = $1;', [ id ]);
 
-        if (!post) {
-            res.status(404).json({ message: 'PostNotFound' });
+        if (!comment) {
+            res.status(404).json({ message: 'CommentNotFound' });
             return
         }
 
         let profile: PartialProfile | undefined;
-        profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as PartialProfile;
+        profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ comment.author_id ]) as PartialProfile;
 
-        if (author.level >= 4 || (profile && post.id == profile.id)) {
+        if (author.level >= 6 || (profile && comment.author_id == profile.id)) {
             await db.run('DELETE FROM Comments WHERE id = $1;', [ id ]);
         } else {
             res.status(403).json({ message: 'Forbidden' })
@@ -359,8 +359,7 @@ router.post('/new', async (req: Request, res: Response) => {
     const content: string = req.body.content
     const visibility: PartialComment['visibility'] = req.body.visibility
     const answers_to: string | null = req.body.answers_to || null
-    const post_id: string | null = req.body.post || null
-
+    const post_id: string | null = req.body.post_id || null
 
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
@@ -380,10 +379,11 @@ router.post('/new', async (req: Request, res: Response) => {
 
         const badge: Badge | null = author.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ author.badge ]) as Badge : null;
 
-        const post: PartialPost | undefined = answers_to ? await db.get('SELECT * FROM Posts WHERE id = $1;', [ post_id ]) as PartialPost : undefined;
+        const post: PartialPost | undefined = await db.get('SELECT * FROM Posts WHERE id = $1;', [ post_id ]) as PartialPost;
         const post_author: PartialProfile | undefined = post ? await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as PartialProfile : undefined;
 
         if (!post) {
+            console.log(post, post_id)
             res.status(404).json({ message: 'PostNotFound' });
             return
         }
@@ -405,7 +405,7 @@ router.post('/new', async (req: Request, res: Response) => {
         }
 
         /* Limitations & sécurité */
-        if (content.length > 5000) {
+        if (content.length > 500) {
             res.status(413).json({ message: 'PostTooLong' })
         }
 
@@ -420,12 +420,11 @@ router.post('/new', async (req: Request, res: Response) => {
             creation_date: new Date(),
             update_date: null,
             likes: 0,
-            tags: [],
             flags: []
         }
 
-        const post_relations: Relations | undefined = await db.get('SELECT * FROM Relations WHERE id = $1;', [ parent_author!.id ]) as Relations;
-        const is_visible = (field: string) => can_access(field, parent_author!, post_relations, session)
+        const post_relations: Relations | undefined = await db.get('SELECT * FROM Relations WHERE id = $1;', [ post_author!.id ]) as Relations;
+        const is_visible = (field: string) => can_access(field, post_author!, post_relations, session)
 
         if (!is_visible(post!.visibility)) {
             res.status(403).json({ message: 'PostIsPrivate' });
@@ -444,14 +443,15 @@ router.post('/new', async (req: Request, res: Response) => {
 
                 const parent_inbox: PartialInbox | undefined = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ parent_author!.id ]) as PartialInbox;
 
-                const new_notif: PartialNotificationPost = {
+                const new_notif: PartialNotificationComment = {
                     id: genChar(12, 'hex').toUpperCase(),
                     date: new Date(),
                     type: 'answer_comment',
                     isGroupable: false,
                     read: false,
                     author: author.id,
-                    target: post!.id,
+                    target: comment!.id,
+                    post: post!.id
                 }
 
                 parent_inbox.other.unshift(new_notif)
@@ -461,21 +461,22 @@ router.post('/new', async (req: Request, res: Response) => {
 
             const post_inbox: PartialInbox | undefined = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ post_author!.id ]) as PartialInbox;
 
-            const new_notif: PartialNotificationPost = {
+            const new_notif: PartialNotificationComment = {
                 id: genChar(12, 'hex').toUpperCase(),
                 date: new Date(),
-                type: 'answer_comment',
+                type: 'add_comment',
                 isGroupable: false,
                 read: false,
                 author: author.id,
-                target: post!.id,
+                target: comment!.id,
+                post: post!.id
             }
 
             post_inbox.other.unshift(new_notif)
 
             await db.run('UPDATE Inbox SET other = $1 WHERE id = $2;', [ post_inbox.other, post_author!.id ])
 
-            await db.run('INSERT INTO Posts (id, author_id, parent_id, content, attachments, visibility, creation_date, update_date, likes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', Object.values(post))
+            await db.run('INSERT INTO Comments (id, author_id, post_id, parent_id, content, visibility, creation_date, update_date, likes, flags) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)', Object.values(comment))
         } catch (err) {
             console.error(err);
             res.status(500).json({ message: 'Error'});

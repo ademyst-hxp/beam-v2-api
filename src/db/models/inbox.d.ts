@@ -30,8 +30,18 @@ export interface PartialNotificationPost extends PartialNotificationSingle {
     target: string
 }
 
+export interface PartialNotificationComment extends PartialNotificationSingle {
+    target: string
+    post: string
+}
+
 export interface NotificationPost extends NotificationSingle {
     target: string
+}
+
+export interface NotificationComment extends NotificationSingle {
+    target: string
+    post: string
 }
 
 export interface NotificationWarn extends NotificationBase {
@@ -44,8 +54,8 @@ export interface NotificationBan extends NotificationBase {
     reason: string
 }
 
-export type Notification = NotificationSingle | NotificationWarn | NotificationBan;
-export type PartialNotification = PartialNotificationSingle | PartialNotificationPost;
+export type Notification = NotificationSingle | NotificationWarn | NotificationBan | NotificationPost | NotificationComment;
+export type PartialNotification = PartialNotificationSingle | PartialNotificationPost | PartialNotificationComment;
 
 export type PartialInbox = {
     id: string
@@ -54,7 +64,7 @@ export type PartialInbox = {
         following: Profile.id[]
         followers: Profile.id[]
     }
-    other: PartialNotificationSingle[]
+    other: PartialNotification[]
 }
 
 export type Inbox = {

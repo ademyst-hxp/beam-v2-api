@@ -45,19 +45,3 @@ export const convertComment = (
         post: post
     }
 }
-
-/* convertComment */
-/*const data: any = {
-    ...__without_id,
-    answers: parseInt(answers.count),
-    author: convertProfile(_profile, relations),
-    post: convertPost(
-        _post, 
-        {
-            reposts: parseInt(reposts.count),
-            comments: parseInt(comments.count)
-        },
-        _profile,
-        relations
-    )
-}*/

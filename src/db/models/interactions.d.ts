@@ -51,8 +51,6 @@ export type Comment = {
 
 	likes: number
 	answers: number
-
-	tags: string[]
 }
 
 export type PartialComment = {
@@ -68,6 +66,5 @@ export type PartialComment = {
 	update_date: Date | null
 
 	likes: number
-	tags: string[]
 	flags: string[]
 }

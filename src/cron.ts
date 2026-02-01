@@ -8,7 +8,7 @@ import { checkLevels } from "./jobs/check_levels.js";
 })();
 
 // Schedule to run every hour
-setInterval(async () => {
-    await checkBadges();
-    await checkLevels();
+setInterval(() => {
+    checkBadges();
+    checkLevels();
 }, parseInt(process.env.CRON_DELAY || "3600") * 1000);

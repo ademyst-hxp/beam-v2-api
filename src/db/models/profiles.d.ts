@@ -4,7 +4,7 @@ export type Badge = {
 	description: string
 	colors: Record<string, string | string[]>
 	icon: string
-	level: number
+	rarity: number
 }
 
 export type PartialProfile = {

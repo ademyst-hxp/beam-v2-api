@@ -39,6 +39,7 @@ console.log('Creating table Entitlements');
 await db.run(`CREATE TABLE IF NOT EXISTS Entitlements (
     id              TEXT UNIQUE NOT NULL PRIMARY KEY,
     account         TEXT NOT NULL,
+	name 		  	TEXT NOT NULL,
 	granted_by	    TEXT NOT NULL,
 	granted_at      TIMESTAMPTZ NOT NULL,
 	expires_at 	    TIMESTAMPTZ NOT NULL,

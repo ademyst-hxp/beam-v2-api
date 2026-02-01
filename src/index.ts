@@ -24,7 +24,13 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 app.use(cors({
-    origin: [ 'http://localhost:5173', 'https://beam.ejnalo.me' ],
+    origin: [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'https://beam.ejnalo.me',
+        'https://www.beam.ejnalo.me',
+        'https://dev.beam.ejnalo.me'
+    ],
     credentials: true
 }));
 

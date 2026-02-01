@@ -26,13 +26,18 @@ export async function checkLevels() {
         });
 
         if (entitlements.length === 0) {
-            user.level = 3;
-            await db.run('UPDATE Users SET level = $1 WHERE id = $2;', [ 3, user.id ]);
+            if (user.level > 3) {
+                console.log("Setting level 3 for user", user.id);
+                user.level = 3;
+                await db.run('UPDATE Users SET level = $1 WHERE id = $2;', [ 3, user.id ]);
+            }
+
             continue;
         } else if (user.level >= 3) {
             let topLevel = parseInt(entitlements[0].reward_id);
 
             if (user.level !== topLevel) {
+                console.log("Setting level", topLevel, "for user", user.id);
                 user.level = topLevel;
                 await db.run('UPDATE Users SET level = $1 WHERE id = $2;', [ topLevel, user.id ]);
             }
