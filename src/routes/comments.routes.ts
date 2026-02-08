@@ -21,13 +21,14 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
-        let author: PartialProfile | null;
 
-        if (session) {
-            author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
-        } else {
-            author = null;
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
         }
+
+        let author: PartialProfile | null;
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
 
 
         let comment: PartialComment | null;
@@ -94,7 +95,7 @@ router.get('/:id', async (req: Request, res: Response) => {
         const comments = await db.get(`SELECT COUNT(*) FROM Comments WHERE post_id = $1;`, [ comment.post_id ]);
 
         const profile = convertProfile(_profile, relations, badge);
-        const post = convertPost(
+        const post = await convertPost(
             _post,
             {
                 reposts: parseInt(reposts.count),
@@ -383,7 +384,6 @@ router.post('/new', async (req: Request, res: Response) => {
         const post_author: PartialProfile | undefined = post ? await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as PartialProfile : undefined;
 
         if (!post) {
-            console.log(post, post_id)
             res.status(404).json({ message: 'PostNotFound' });
             return
         }
@@ -488,7 +488,7 @@ router.post('/new', async (req: Request, res: Response) => {
         const data: Comment = convertComment(
             comment,
             { answers: 0 },
-            convertPost(
+            await convertPost(
                 post,
                 { reposts: 0, comments: 0 },
                 convertProfile(post_author, post_relations, post_badge)

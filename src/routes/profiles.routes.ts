@@ -14,12 +14,51 @@ import type { PartialInbox, PartialNotificationSingle } from '../db/models/inbox
 
 const router = Router();
 
+
+router.get('/fetch', async (req: Request, res: Response) => {
+    let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
+    let query: string = req.query.q as string;
+
+    try {
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
+
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
+        let profiles: Profile[] = [];
+        let _result: PartialProfile[] = await db.all('SELECT * FROM Users WHERE name ILIKE $1;', [ `%${query}%` ]) as PartialProfile[];
+
+        for (const p of _result) {
+            let relations: Relations | undefined;
+            relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ p.id ]) as Relations;
+
+            if (!relations.blocklist.includes(session.account) && !relations.blocklist.includes(session.ip || '')) {
+                const badge: Badge | null = p.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ p.badge ]) as Badge : null;
+                profiles.push(convertProfile(p, relations, badge));
+            }
+        }
+
+        res.status(200).json(profiles);
+        return
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error' });
+    }
+});
+
 router.get('/:name', async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
     let name: string = req.params.name;
 
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
+
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
 
         let profile: PartialProfile | undefined;
         profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
@@ -70,6 +109,11 @@ router.get('/:name/avatar.png', async (req: Request, res: Response) => {
 
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
+
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
 
         let _profile: PartialProfile | undefined;
         _profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
@@ -146,6 +190,11 @@ router.get('/:name/following', async (req: Request, res: Response) => {
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
 
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
         let profile: PartialProfile | undefined;
         profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
 
@@ -196,6 +245,11 @@ router.get('/:name/followers', async (req: Request, res: Response) => {
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
 
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
         let profile: PartialProfile | undefined;
         profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
 
@@ -245,6 +299,11 @@ router.get('/:name/posts', async (req: Request, res: Response) => {
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
 
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
         let profile: PartialProfile | undefined;
         profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
 
@@ -284,8 +343,8 @@ router.get('/:name/posts', async (req: Request, res: Response) => {
             const reposts = await db.get(`SELECT COUNT(*) FROM Posts WHERE parent_id = $1;`, [ p.id ]);
             const comments = await db.get(`SELECT COUNT(*) FROM Comments WHERE post_id = $1;`, [ p.id ]);
 
-            let new_p: Post = convertPost(
-                p, 
+            let new_p: Post = await convertPost(
+                p,
                 { reposts: reposts.count, comments: comments.count },
                 convertProfile(profile, relations, badge)
             )
@@ -449,7 +508,6 @@ router.post('/:name/unfollow', async (req: Request, res: Response) => {
             res.status(200).json({ message: 'Success' });
             return
         } else {
-            console.log(relations.followers, author.id)
             res.status(204).json({ message: 'NoContent' });
             return
         }

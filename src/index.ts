@@ -13,8 +13,6 @@ import authRoute from './routes/auth.routes.js';
 import dashboardRoute from './routes/dashboard.routes.js';
 import leaderboardRoute from './routes/leaderboard.routes.js';
 import usersRoute from './routes/profiles.routes.js';
-import shortUserRoute from './routes/_u.routes.js';
-import shortPostRoute from './routes/_p.routes.js';
 import postsRoute from './routes/posts.routes.js';
 import driveRoute from './routes/drive.routes.js';
 import modRoute from './routes/mod.routes.js';
@@ -64,8 +62,6 @@ app.use('/users', usersRoute);
 app.use('/top', leaderboardRoute);
 app.use('/posts', postsRoute);
 app.use('/comments', commentsRoute);
-app.use('/u', shortUserRoute);
-app.use('/p', shortPostRoute);
 app.use('/drive', driveRoute);
 app.use('/mod', modRoute);
 

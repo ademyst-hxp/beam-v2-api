@@ -10,7 +10,7 @@ import { convertPost, convertProfile } from '../utils/converters.js';
 
 import type { Session } from '../db/models/auth.js';
 import type { Badge, PartialProfile, Profile, Settings, Relations, Tastes } from '../db/models/profiles.js'
-import type { PartialPost } from '../db/models/interactions.js';
+import type { PartialPost, Post } from '../db/models/interactions.js';
 import type { PartialInbox } from '../db/models/inbox.js';
 import type { Notification } from '../db/models/inbox.js';
 
@@ -262,8 +262,6 @@ router.get('/entitlements/badges', async (req: Request, res: Response) => {
         let entitlements;
         entitlements = await db.all('SELECT * FROM Entitlements WHERE account = $1;', [ session.account ]);
 
-        console.log(entitlements)
-
         entitlements = entitlements.filter((e: any) => {
             if (e.expires_at && new Date(e.expires_at) < new Date()) return false
             if (e.revoked) return false
@@ -356,8 +354,6 @@ router.put('/profile', async (req: Request, res: Response) => {
             return true
         });
 
-        console.log(entitlements, new_profile.badge);
-
         if (new_profile.badge && !entitlements.length) {
             new_profile.badge = null;
         }
@@ -432,7 +428,7 @@ router.post('/avatar', avatar_upload.single('avatar'),async (req: Request, res: 
 router.get('/feed', async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
     const offset = parseInt(req.query.offset as string) || 0;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const limit = parseInt(req.query.limit as string) || 50;
 
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
@@ -457,7 +453,7 @@ router.get('/feed', async (req: Request, res: Response) => {
             likes = likes.concat(influencer_tastes.likes);
         }
 
-        let posts: any[] = [];
+        let posts: Post[] = [];
         let _result: PartialPost[] = await db.all('SELECT * FROM Posts WHERE id = ANY($1) OR author_id = ANY($2) OR likes > 5 ORDER BY creation_date DESC;', [ likes, my_relations.following ]) as PartialPost[];
 
         for (const p of _result) {
@@ -470,7 +466,7 @@ router.get('/feed', async (req: Request, res: Response) => {
             const reposts = await db.get(`SELECT COUNT(*) FROM Posts WHERE parent_id = $1;`, [ p.id ]);
             const comments = await db.get(`SELECT COUNT(*) FROM Comments WHERE post_id = $1;`, [ p.id ]);
 
-            let new_p = convertPost(
+            let new_p = await convertPost(
                 p, 
                 { 
                     reposts: parseInt(reposts.count), 
@@ -486,7 +482,7 @@ router.get('/feed', async (req: Request, res: Response) => {
 
         posts = posts.sort((a, b) => new Date(b.creation_date).getTime() - new Date(a.creation_date).getTime());
 
-        const calcStats = (post: any): number => {
+        const calcStats = (post: Post): number => {
             let stats = post.likes;
             stats += 1.5 * post.reposts;
             stats += 2 * post.comments;
@@ -495,13 +491,14 @@ router.get('/feed', async (req: Request, res: Response) => {
             return stats;
         }
 
-        for (const post of posts) {
-            post.score = calcStats(post);
-        }
-
-        posts = posts.sort((a, b) => b.score - a.score);
+        posts = posts.sort((a, b) => calcStats(b) - calcStats(a));
         posts = posts.filter((p) => !my_tastes.likes.includes(p.id));
         posts = posts.filter((p) => p.author.id != session!.account);
+
+        if (posts.length > limit) {
+            posts = posts.filter((p) => p.creation_date >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+        }
+
         posts = posts.slice(offset, offset + limit);
 
         res.status(200).json({ posts: posts });

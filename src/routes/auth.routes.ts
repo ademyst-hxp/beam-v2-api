@@ -182,21 +182,44 @@ router.post('/signup', async (req: Request, res: Response) => {
 
     let _private: boolean = req.body.private;
 
-
     let password_hash = await bcrypt.hash(password, 12);
 
+    let code: string = req.body.sudo_code;
+
     try {
+        const sudo = await db.get('SELECT * FROM Sudo WHERE token = $1', [ code ]) as Record<string, any>;
+
+        if (!sudo) {
+            res.status(401).json({ message: 'InvalidSudoToken' });
+            return
+        }
+
+        if (new Date(sudo.__expires) < new Date()) {
+            res.status(401).json({ message: 'SudoTokenExpired' });
+            return
+        }
+
+        if (sudo.user_generated) {
+            res.status(401).json({ message: 'InvalidSudoToken' });
+            return
+        }
+
+        if (sudo.action !== 'signup') {
+            res.status(401).json({ message: 'InvalidSudoToken' });
+            return
+        }
+
         if (
             username.length < 3 ||
-            username.length > 24 ||
-            !/^[a-zA-Z0-9_]+$/.test(username)
+            username.length > 16 ||
+            !/^[a-z0-9._]+$/.test(username)
         ) {
             res.status(400).json({ message: 'InvalidProfileName' });
             return
         }
 
         if (
-            !/^[a-zA-Z0-9_]+@[a-zA-Z0-9]+\.[a-zA-Z]{2,}$/.test(email)
+            !/^[a-zA-Z0-9._]+@[a-zA-Z0-9]+\.[a-zA-Z]{2,}$/.test(email)
         ) {
             res.status(400).json({ message: 'InvalidEmail' });
             return
@@ -344,6 +367,43 @@ router.post('/signup', async (req: Request, res: Response) => {
             return
         }
 
+        /* Badge gratuit */
+        await db.run('INSERT INTO entitlements (account, granted_by, granted_at, expires_at, revoked, reward_type, reward_id, reason, name) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [
+            account.id,
+            'system',
+            new Date(),
+            null,
+            false,
+            'badge',
+            'prestige',
+            'Cadeau de bienvenue offert à tous les utilisateurs beta',
+            'Badge Prestige'
+        ]);
+
+        await db.run('INSERT INTO entitlements (account, granted_by, granted_at, expires_at, revoked, reward_type, reward_id, reason, name) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [
+            account.id,
+            'system',
+            new Date(),
+            null,
+            false,
+            'level',
+            '4',
+            'Cadeau de bienvenue offert à tous les utilisateurs beta',
+            'Grade Premium'
+        ]);
+
+        await db.run('INSERT INTO entitlements (account, granted_by, granted_at, expires_at, revoked, reward_type, reward_id, reason, name) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [
+            account.id,
+            'system',
+            new Date(),
+            null,
+            false,
+            'badge',
+            'premium',
+            'Badge offert avec le grade Premium',
+            'Badge Premium'
+        ]);
+
         res.status(200).json({ message: 'Success' });
     } catch (err) {
         console.error(err);
@@ -368,7 +428,7 @@ router.post('/password-reset', async (req: Request, res: Response) => {
             return
         }
 
-        if (result.action !== 'password-reset') {
+        if (result.action !== 'reset-password') {
             console.log('Invalid action for token:', result.action);
             res.status(401).json({ message: 'InvalidToken' });
             return
@@ -378,6 +438,7 @@ router.post('/password-reset', async (req: Request, res: Response) => {
 
         await db.run('UPDATE Logins SET password_hash = $1 WHERE id = $2', [ password_hash, (result as any).account ]);
         await db.run('UPDATE Sudo SET __expires = $1 WHERE token = $2', [ new Date(), token ]);
+        await db.run('DELETE FROM Sessions WHERE account = $1', [ (result as any).account ]);
 
         res.status(200).json({ message: 'Success' });
     } catch (err) {
@@ -404,7 +465,7 @@ router.post('/email-reset', async (req: Request, res: Response) => {
             return
         }
 
-        if (result.action !== 'email-reset') {
+        if (result.action !== 'reset-email') {
             console.log('Invalid action for token:', result.action);
             res.status(401).json({ message: 'InvalidToken' });
             return
@@ -412,6 +473,7 @@ router.post('/email-reset', async (req: Request, res: Response) => {
 
         await db.run('UPDATE Logins SET email = $1 WHERE id = $2', [ new_email, (result as any).account ]);
         await db.run('UPDATE Sudo SET __expires = $1 WHERE token = $2', [ new Date(), token ]);
+        await db.run('DELETE FROM Sessions WHERE account = $1', [ (result as any).account ]);
 
         res.status(200).json({ message: 'Success' });
     } catch (err) {

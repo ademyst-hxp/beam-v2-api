@@ -22,7 +22,7 @@ router.get('/:id', async (req: Request, res: Response) => {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
 
         let _file: File | undefined;
-        _file = await db.get('SELECT * FROM Files WHERE name = $1;', [ id ]) as File;
+        _file = await db.get('SELECT * FROM Files WHERE id = $1;', [ id ]) as File;
 
         if (!_file) {
             res.status(404).json({ message: 'FileNotFound' });
@@ -48,10 +48,11 @@ router.get('/:id', async (req: Request, res: Response) => {
 
         if (!is_visible(_file.visibility)) {
             res.status(403).send({ message: 'FileIsPrivate'})
+            return
         }
 
         const { data, error } = await supabase.storage
-            .from('profiles')
+            .from('files')
             .download(_file.path)
 
         const buffer = Buffer.from(await data!.arrayBuffer());
@@ -74,13 +75,13 @@ const file_upload = multer({
     limits: { fileSize: 5 * 1024 * 1024 }, // limite de taille de fichier à 5MB
 });
 
-router.post('/upload_attachment', file_upload.single('file'),async (req: Request, res: Response) => {
+router.post('/upload/attachment', file_upload.single('file'),async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
     const file_data = req.file;
 
-    const post_id = req.body.post_id || null;
-    const visibility = req.body.visibility || 'everyone';
-    const ephemeral = req.body.ephemeral === 'true' || false;
+    const post_id = req.query.post_id || null;
+    let visibility = req.query.visibility || 'everyone';
+    let ephemeral = req.query.ephemeral || false;
 
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
@@ -90,6 +91,18 @@ router.post('/upload_attachment', file_upload.single('file'),async (req: Request
             return
         }
 
+        const post: PartialPost | undefined = await db.get('SELECT * FROM Posts WHERE id = $1;', [ post_id ]) as PartialPost;
+
+        if (post_id && !post) {
+            res.status(404).json({ message: 'PostNotFound' });
+            return
+        }
+
+        visibility = post ? post.visibility : visibility;
+        ephemeral = post ? false : ephemeral;
+        // override specified visibility if the file is attached to a post
+
+
         const file_buffer = await readFile(file_data!.path);
 
         const file_id = genChar(12, 'hex');
@@ -97,28 +110,26 @@ router.post('/upload_attachment', file_upload.single('file'),async (req: Request
         await db.run('INSERT INTO Files (id, author_id, path, type, visibility, ephemeral, creation_date, update_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT(id) DO UPDATE SET type = $4, update_date = $8;', [
             file_id,
             session.account,
-            `/attachments/${session.account}/${file_id}`,
+            `/attachments/${session.account.toLowerCase()}/${file_id.toLowerCase()}`,
             file_data?.mimetype || 'image/png',
             visibility,
             ephemeral,
             new Date(),
-            new Date()
+            null
         ]);
 
-        await supabase.storage.from('files').upload(`/attachments/${session.account}/${file_id}`, file_buffer, {
+        await supabase.storage.from('files').upload(`/attachments/${session.account.toLowerCase()}/${file_id.toLowerCase()}`, file_buffer, {
             contentType: file_data?.mimetype || 'image/png',
             upsert: true
         });
 
-        const post: PartialPost = await db.get('SELECT * FROM Posts WHERE id = $1;', [ post_id ]) as PartialPost;
-
-        if (post_id && post) {
-            let attachments: string[] = post.attachments || [];
+        if (post) {
+            let attachments: string[] = post.attachments;
             attachments.push(file_id);
 
             await db.run('UPDATE Posts SET attachments = $1 WHERE id = $2;', [
                 attachments,
-                post_id
+                post.id
             ]);
         };
 

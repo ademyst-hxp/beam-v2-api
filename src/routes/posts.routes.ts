@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, text } from 'express';
 
 import type { Request, Response } from 'express';
 import he from 'he'
@@ -14,6 +14,66 @@ import type { PartialInbox, PartialNotificationSingle, PartialNotificationPost }
 
 const router = Router();
 
+router.get('/fetch', async (req: Request, res: Response) => {
+    let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
+
+    let query: string = req.query.q as string;
+    let author: string = req.query.author as string;
+    let before: string = new Date(req.query.before as string || new Date().toISOString()).toISOString();
+    let after: string = new Date(req.query.after as string || new Date(0).toISOString()).toISOString();
+
+    try {
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
+
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
+        let posts: Post[] = [];
+        let _result: PartialPost[] = await db.all('SELECT * FROM Posts WHERE content ILIKE $1 AND creation_date < $2 AND creation_date > $3 ORDER BY creation_date DESC;', [ `%${query}%`, before, after ]) as PartialPost[];
+
+        let author_profile: PartialProfile | null;
+
+        if (author) {
+            author_profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ author ]) as PartialProfile;
+
+            if (!author_profile) {
+                res.status(404).json({ message: 'AuthorNotFound' });
+                return
+            }
+
+            _result = _result.filter(p => p.author_id === author_profile!.id);
+        } else {
+            author_profile = null;
+        }
+
+        for (const p of _result) {
+            let relations: Relations | undefined;
+            relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ p.author_id ]) as Relations;
+
+            const profile: PartialProfile | undefined = await db.get('SELECT * FROM Users WHERE id = $1;', [ p.author_id ]) as PartialProfile;
+
+            if (profile && can_access(p.visibility, profile, relations, session)) {
+                posts.push(await convertPost(
+                    p,
+                    {
+                        reposts: (await db.get(`SELECT COUNT(*) FROM Posts WHERE parent_id = $1;`, [ p.id ])).count,
+                        comments: (await db.get(`SELECT COUNT(*) FROM Comments WHERE post_id = $1;`, [ p.id ])).count
+                    },
+                    convertProfile(profile, relations, profile.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ profile.badge ]) as Badge : null)
+                ))
+            }
+        }
+
+        res.status(200).json(posts);
+        return
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error' });
+    }
+});
+
 router.get('/:id', async (req: Request, res: Response) => {
     const id = req.params.id
 
@@ -21,13 +81,14 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
-        let author: PartialProfile | null;
 
-        if (session) {
-            author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
-        } else {
-            author = null;
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
         }
+
+        let author: PartialProfile | null;
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
 
 
         let post: PartialPost | null;
@@ -76,7 +137,7 @@ router.get('/:id', async (req: Request, res: Response) => {
         const reposts = await db.get(`SELECT COUNT(*) FROM Posts WHERE parent_id = $1;`, [ id ]);
         const comments = await db.get(`SELECT COUNT(*) FROM Comments WHERE post_id = $1;`, [ id ]);
 
-        const data: Post = convertPost(
+        const data: Post = await convertPost(
             post,
             {
                 reposts: parseInt(reposts.count),
@@ -114,8 +175,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
         }
 
 
-        let post: any;
-        post = await db.get('SELECT * FROM Posts WHERE id = $1;', [ id ]);
+        let post: PartialPost;
+        post = await db.get('SELECT * FROM Posts WHERE id = $1;', [ id ]) as PartialPost;
 
         if (!post) {
             res.status(404).json({ message: 'PostNotFound' });
@@ -127,6 +188,10 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
         if (author.level >= 6 || (profile && post.author_id == profile.id)) {
             await db.run('DELETE FROM Posts WHERE id = $1;', [ id ]);
+            await db.run('DELETE FROM Files WHERE id = ANY($1);', [ post.attachments ]);
+            await db.run('DELETE FROM Comments WHERE post_id = $1;', [ id ]);
+            await db.run('UPDATE Posts SET reposts = reposts - 1 WHERE id = $1;', [ post.parent_id ]);
+            await db.run('UPDATE Tastes SET likes = array_remove(likes, $1) WHERE $1 = ANY(likes);', [ id ]);
         } else {
             res.status(403).json({ message: 'Forbidden' });
             return;
@@ -442,7 +507,7 @@ router.get('/:id/comments', async (req: Request, res: Response) => {
                 let new_c: Comment = convertComment(
                     c,
                     { answers: (await db.get(`SELECT COUNT(*) FROM Comments WHERE parent_id = $1;`, [ c.id ])).count },
-                    convertPost(
+                    await convertPost(
                         post,
                         {
                             reposts: (await db.get(`SELECT COUNT(*) FROM Posts WHERE parent_id = $1;`, [ post.id ])).count,
@@ -506,11 +571,15 @@ router.post('/new', async (req: Request, res: Response) => {
 
         /* Limitations & sécurité */
         if (content.length > (author.level >= 5 ? 2000 : author.level >= 4 ? 1000 : 500)) {
-            res.status(413).json({ message: 'PostTooLong' })
+            res.status(413).json({ message: 'PostTooLong' });
+            return;
         }
 
         /* Enregistrement du post */
-        let post: any = {
+        const tags = [...content.matchAll(/#([\p{L}\p{N}_]+)/gu)]
+            .map(match => match[1]);
+
+        let post: PartialPost = {
             id: genChar(8, 'hex').toUpperCase(),
             author_id: author.id,
             parent_id: parent?.id || null,
@@ -519,7 +588,9 @@ router.post('/new', async (req: Request, res: Response) => {
             visibility: visibility,
             creation_date: new Date(),
             update_date: null,
-            likes: 0
+            likes: 0,
+            tags: tags,
+            flags: []
         }
 
         if (answers_to) {
@@ -545,12 +616,44 @@ router.post('/new', async (req: Request, res: Response) => {
 
             parent_inbox.other.unshift(new_notif)
 
-            await db.run('UPDATE Inbox SET other = $1 WHERE id = $2;', [ parent_inbox.other, parent_author!.id ])
+            await db.run('UPDATE Inbox SET other = $1 WHERE id = $2;', [ parent_inbox.other, parent_author!.id ]);
         }
 
-        await db.run('INSERT INTO Posts (id, author_id, parent_id, content, attachments, visibility, creation_date, update_date, likes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', Object.values(post));
+        const mentions = [...content.matchAll(/@([a-z0-9._]+)/gu)]
+            .map(match => match[1]);
 
-        const data: Post = convertPost(
+        for (const mention of mentions) {
+            const mentioned_profile: PartialProfile | undefined = await db.get('SELECT * FROM Users WHERE name = $1;', [ mention ]) as PartialProfile;
+
+            if (mentioned_profile) {
+                const mentioned_relations: Relations | undefined = await db.get('SELECT * FROM Relations WHERE id = $1;', [ mentioned_profile.id ]) as Relations;
+                const mentioned_settings: Settings | undefined = await db.get('SELECT * FROM Settings WHERE id = $1;', [ mentioned_profile.id ]) as Settings;
+
+                const is_visible = (field: string) => can_access(field, mentioned_profile!, mentioned_relations, session)
+
+                if (is_visible(mentioned_settings.privacy.profile)) {
+                    const mentioned_inbox: PartialInbox | undefined = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ mentioned_profile.id ]) as PartialInbox;
+
+                    const new_notif: PartialNotificationPost = {
+                        id: genChar(12, 'hex').toUpperCase(),
+                        date: new Date(),
+                        type: 'mention',
+                        isGroupable: false,
+                        read: false,
+                        author: author.id,
+                        target: post!.id,
+                    }
+
+                    mentioned_inbox.other.unshift(new_notif)
+
+                    await db.run('UPDATE Inbox SET other = $1 WHERE id = $2;', [ mentioned_inbox.other, mentioned_profile.id ]);
+                }
+            }
+        }
+
+        await db.run('INSERT INTO Posts (id, author_id, parent_id, content, attachments, visibility, creation_date, update_date, likes, tags, flags) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)', Object.values(post));
+
+        const data: Post = await convertPost(
             post,
             { reposts: 0, comments: 0 },
             convertProfile(author, relations, badge)

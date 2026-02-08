@@ -24,7 +24,7 @@ export type Post = {
 	parent_id: Post.id | null
 
 	content: string
-	attachments: File.id[]
+	attachments: File[]
 
 	visibility: "me" | "friends" | "followers" | "everyone"
 	creation_date: Date
