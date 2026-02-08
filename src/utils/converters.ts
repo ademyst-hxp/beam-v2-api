@@ -1,8 +1,8 @@
-import type { Badge, PartialProfile, Profile, Relations } from "@/db/models/profiles.js";
-import type { PartialPost, Post, PartialComment, Comment } from "@/db/models/interactions.js";
-import { File } from "@/db/models/drive.js";
+import type { Badge, PartialProfile, Profile, Relations } from "../db/models/profiles.js";
+import type { PartialPost, Post, PartialComment, Comment } from "../db/models/interactions.js";
+import { File } from "../db/models/drive.js";
 
-import db from "@/db/index.js";
+import db from "../db/index.js";
 
 export const convertProfile = (profile: PartialProfile, relations: Relations, badge: Badge | null): Profile => {
     let { flags, ...p } = profile

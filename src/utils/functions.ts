@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+
 import { PartialProfile, Settings, Relations } from '../db/models/profiles.js';
 import type { Session } from '../db/models/auth.js';
 
