@@ -10,7 +10,7 @@ import { can_access, genChar } from '../utils/functions.js';
 import type { Session } from '../db/models/auth.js';
 import type { PartialProfile, Settings, Relations } from '../db/models/profiles.js';
 import { File } from '../db/models/drive.js';
-import { PartialPost } from '@/db/models/interactions.js';
+import { PartialPost } from '../db/models/interactions.js';
 
 const router = Router();
 
