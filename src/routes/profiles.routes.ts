@@ -543,7 +543,7 @@ router.post('/:name/unfollow', async (req: Request, res: Response) => {
                     my_inbox.outgoing.follow = my_inbox.outgoing.follow.filter(_request => (_request.to !== profile.id));
                     await db.run('UPDATE Inbox SET outgoing = $1 WHERE id = $2;', [ my_inbox.outgoing, author.id ]);
 
-                    res.status(200).json({ message: 'Success' });
+                    res.status(202).json({ message: 'Success' });
                     return
                 }
             }
