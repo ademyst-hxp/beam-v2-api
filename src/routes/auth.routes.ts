@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 
 import type { Request, Response } from 'express';
 
@@ -8,8 +9,7 @@ import { genChar } from '../utils/functions.js';
 
 import type { Session, Account } from '../db/models/auth.js';
 import type { PartialProfile, Settings, Relations, Tastes } from '../db/models/profiles.js';
-import type { Inbox } from '../db/models/inbox.js';
-import { randomUUID } from 'crypto';
+import type { Inbox, PartialInbox } from '../db/models/inbox.js';
 
 const router = Router();
 
@@ -314,18 +314,21 @@ router.post('/signup', async (req: Request, res: Response) => {
             return
         }
 
-        const inbox: Inbox = {
+        const inbox: PartialInbox = {
             id: account.id,
-            requests: {
+            outgoing: {
                 children: [],
-                following: [],
-                followers: []
+                follow: []
+            },
+            incoming: {
+                children: [],
+                follow: []
             },
             other: []
         };
 
         try {
-            await db.run('INSERT INTO Inbox (id, requests, other) VALUES ($1, $2, $3)', Object.values(inbox));
+            await db.run('INSERT INTO Inbox (id, outgoing, incoming, other) VALUES ($1, $2, $3, $4)', Object.values(inbox));
         } catch (err) {
             console.error(err);
             await db.run('DELETE FROM Tastes WHERE id = $1', [ account.id ]);

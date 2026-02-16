@@ -10,6 +10,9 @@ await db.run(`CREATE TABLE IF NOT EXISTS Logins (
     password_hash   TEXT NOT NULL,
     email           TEXT UNIQUE NOT NULL
 )`);
+await db.run('CREATE INDEX IF NOT EXISTS Logins_id_idx ON Logins (id)');
+await db.run('CREATE INDEX IF NOT EXISTS Logins_username_idx ON Logins (username)');
+await db.run('CREATE INDEX IF NOT EXISTS Logins_email_idx ON Logins (email)');
 
 console.log('Creating table Sessions');
 await db.run(`CREATE TABLE IF NOT EXISTS Sessions (
@@ -21,10 +24,11 @@ await db.run(`CREATE TABLE IF NOT EXISTS Sessions (
 
     FOREIGN KEY (account) REFERENCES Logins(id) ON DELETE CASCADE
 )`);
+await db.run('CREATE INDEX IF NOT EXISTS Sessions_id_idx ON Sessions (id)');
 
 console.log('Creating table Sudo');
 await db.run(`CREATE TABLE IF NOT EXISTS Sudo (
-    id              TEXT UNIQUE NOT NULL PRIMARY KEY,
+    id              BIGSERIAL GENERATED ALWAYS AS IDENTITY UNIQUE NOT NULL PRIMARY KEY,
 	created_at      TIMESTAMPTZ NOT NULL,
     token           TEXT NOT NULL,
 	action          TEXT NOT NULL,
@@ -34,15 +38,16 @@ await db.run(`CREATE TABLE IF NOT EXISTS Sudo (
 
     FOREIGN KEY (account) REFERENCES Logins(id) ON DELETE CASCADE
 )`);
+await db.run('CREATE INDEX IF NOT EXISTS Sudo_id_idx ON Sudo (id)');
 
 console.log('Creating table Entitlements');
 await db.run(`CREATE TABLE IF NOT EXISTS Entitlements (
-    id              TEXT UNIQUE NOT NULL PRIMARY KEY,
+    id              BIGSERIAL GENERATED ALWAYS AS IDENTITY UNIQUE NOT NULL PRIMARY KEY,
     account         TEXT NOT NULL,
 	name 		  	TEXT NOT NULL,
 	granted_by	    TEXT NOT NULL,
 	granted_at      TIMESTAMPTZ NOT NULL,
-	expires_at 	    TIMESTAMPTZ NOT NULL,
+	expires_at 	    TIMESTAMPTZ,
 	revoked		    BOOLEAN NOT NULL,
     reward_type     TEXT NOT NULL,
 	reward_id       TEXT NOT NULL,
@@ -50,6 +55,7 @@ await db.run(`CREATE TABLE IF NOT EXISTS Entitlements (
 
     FOREIGN KEY (account) REFERENCES Logins(id) ON DELETE CASCADE
 )`);
+await db.run('CREATE INDEX IF NOT EXISTS Entitlements_id_idx ON Entitlements (id)');
 
 /************************************/
 // PROFILS ET RELATIONS
@@ -63,6 +69,7 @@ await db.run(`CREATE TABLE IF NOT EXISTS Badges (
 	icon		    TEXT NOT NULL,
 	level           INTEGER NOT NULL
 )`);
+await db.run('CREATE INDEX IF NOT EXISTS Badges_id_idx ON Badges (id)');
 
 console.log('Creating table Users');
 await db.run(`CREATE TABLE IF NOT EXISTS Users (
@@ -84,6 +91,8 @@ await db.run(`CREATE TABLE IF NOT EXISTS Users (
 
     FOREIGN KEY (id) REFERENCES Logins(id) ON DELETE CASCADE
 )`);
+await db.run('CREATE INDEX IF NOT EXISTS Users_id_idx ON Users (id)');
+await db.run('CREATE INDEX IF NOT EXISTS Users_name_idx ON Users (name)');
 
 console.log('Creating table Settings');
 await db.run(`CREATE TABLE IF NOT EXISTS Settings (
@@ -94,6 +103,7 @@ await db.run(`CREATE TABLE IF NOT EXISTS Settings (
 
     FOREIGN KEY (id) REFERENCES Logins(id) ON DELETE CASCADE
 )`);
+await db.run('CREATE INDEX IF NOT EXISTS Settings_id_idx ON Settings (id)');
 
 /************************************/
 // INTERACTIONS
@@ -101,11 +111,13 @@ await db.run(`CREATE TABLE IF NOT EXISTS Settings (
 console.log('Creating table Inbox');
 await db.run(`CREATE TABLE IF NOT EXISTS Inbox (
     id               TEXT UNIQUE NOT NULL PRIMARY KEY,
-	requests		 JSONB NOT NULL DEFAULT '{"children":[],"following":[],"followers":[]}'::jsonb,
+	outgoing		 JSONB NOT NULL DEFAULT '{"children":[],"follow":[]}'::jsonb,
+	incoming		 JSONB NOT NULL DEFAULT '{"children":[],"follow":[]}'::jsonb,
 	other    		 JSONB[] NOT NULL DEFAULT '{}'::jsonb[],
 
     FOREIGN KEY (id) REFERENCES Logins(id) ON DELETE CASCADE
 )`);
+await db.run('CREATE INDEX IF NOT EXISTS Inbox_id_idx ON Inbox (id)');
 
 console.log('Creating table Relations');
 await db.run(`CREATE TABLE IF NOT EXISTS Relations (
@@ -119,6 +131,7 @@ await db.run(`CREATE TABLE IF NOT EXISTS Relations (
 
     FOREIGN KEY (id) REFERENCES Logins(id) ON DELETE CASCADE
 )`);
+await db.run('CREATE INDEX IF NOT EXISTS Relations_id_idx ON Relations (id)');
 
 console.log('Creating table Tastes');
 await db.run(`CREATE TABLE IF NOT EXISTS Tastes (
@@ -128,6 +141,7 @@ await db.run(`CREATE TABLE IF NOT EXISTS Tastes (
 
     FOREIGN KEY (id) REFERENCES Logins(id) ON DELETE CASCADE
 )`);
+await db.run('CREATE INDEX IF NOT EXISTS Tastes_id_idx ON Tastes (id)');
 
 console.log('Creating table Posts');
 await db.run(`CREATE TABLE IF NOT EXISTS Posts (
@@ -148,6 +162,7 @@ await db.run(`CREATE TABLE IF NOT EXISTS Posts (
 
 	FOREIGN KEY (author_id) REFERENCES Users(id)
 )`);
+await db.run('CREATE INDEX IF NOT EXISTS Posts_id_idx ON Posts (id)');
 
 console.log('Creating table Comments');
 await db.run(`CREATE TABLE IF NOT EXISTS Comments (
@@ -169,6 +184,7 @@ await db.run(`CREATE TABLE IF NOT EXISTS Comments (
 	FOREIGN KEY (post_id) REFERENCES Posts(id),
 	FOREIGN KEY (parent_id) REFERENCES Comments(id)
 )`);
+await db.run('CREATE INDEX IF NOT EXISTS Comments_id_idx ON Comments (id)');
 
 console.log('Creating table Files');
 await db.run(`CREATE TABLE IF NOT EXISTS Files (
@@ -185,6 +201,7 @@ await db.run(`CREATE TABLE IF NOT EXISTS Files (
 
 	FOREIGN KEY (author_id) REFERENCES Users(id)
 )`);
+await db.run('CREATE INDEX IF NOT EXISTS Files_id_idx ON Files (id)');
 
 /************************************/
 // MODERATION
@@ -205,6 +222,7 @@ await db.run(`CREATE TABLE IF NOT EXISTS Reports (
 	FOREIGN KEY (reporter_id) REFERENCES Users(id),
 	FOREIGN KEY (resolved_by) REFERENCES Users(id)
 )`);
+await db.run('CREATE INDEX IF NOT EXISTS Reports_id_idx ON Reports (id)');
 
 console.log('Creating table Sanctions');
 await db.run(`CREATE TABLE IF NOT EXISTS Sanctions (
@@ -220,6 +238,7 @@ await db.run(`CREATE TABLE IF NOT EXISTS Sanctions (
 	FOREIGN KEY (target_id) REFERENCES Users(id),
 	FOREIGN KEY (issued_by) REFERENCES Users(id)
 )`);
+await db.run('CREATE INDEX IF NOT EXISTS Sanctions_id_idx ON Sanctions (id)');
 
 console.log('Database schema created successfully.');
 

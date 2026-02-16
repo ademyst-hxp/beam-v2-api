@@ -5,14 +5,14 @@ import { readFile } from 'fs/promises';
 import type { Request, Response } from 'express';
 
 import { db, supabase } from '../db/index.js';
-import { can_access } from '../utils/functions.js';
+import { can_access, convert } from '../utils/functions.js';
 import { convertPost, convertProfile } from '../utils/converters.js';
 
 import type { Session } from '../db/models/auth.js';
 import type { Badge, PartialProfile, Profile, Settings, Relations, Tastes } from '../db/models/profiles.js'
 import type { PartialPost, Post } from '../db/models/interactions.js';
-import type { PartialInbox } from '../db/models/inbox.js';
-import type { Notification } from '../db/models/inbox.js';
+import type { PartialInbox, Inbox } from '../db/models/inbox.js';
+import type { Notification, PendingRequest } from '../db/models/inbox.js';
 
 const router = Router();
 
@@ -39,6 +39,9 @@ router.get('/', async (req: Request, res: Response) => {
         let tastes: Tastes | undefined;
         tastes = await db.get('SELECT * FROM Tastes WHERE id = $1;', [ session.account ]) as Tastes;
 
+        let inbox: PartialInbox | undefined;
+        inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ session.account ]) as PartialInbox;
+
         let badge: Badge | null = profile.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ profile.badge ]) as Badge : null;
 
         let new_profile = convertProfile(profile, relations, badge);
@@ -46,18 +49,13 @@ router.get('/', async (req: Request, res: Response) => {
         res.status(200).json({ 
             profile: new_profile,
             avatar: '/users/' + new_profile.name + '/avatar',
-            relations: relations,
+            relations: {
+                ...relations,
+                incoming: inbox.incoming.follow.map((request) => request.from),
+                outgoing: inbox.outgoing.follow.map((request) => request.to)
+            },
             settings: settings,
-            tastes: tastes,
-            inbox: {
-                id: '',
-                requests: {
-                    children: [],
-                    following: [],
-                    followers: []
-                },
-                other: []
-            }
+            tastes: tastes
         });
     } catch (err) {
         console.error(err);
@@ -77,39 +75,78 @@ router.get('/inbox', async (req: Request, res: Response) => {
             return
         }
 
+        let profile: PartialProfile | undefined;
+        profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
+
+        if (!profile) {
+            res.status(404).json({ message: 'UserNotFound' });
+            return
+        }
+
+        let badge = profile.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ profile.badge ]) as Badge : null;
+
+        let relations: Relations | undefined;
+        relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ session.account ]) as Relations;
+
         let inbox: PartialInbox | undefined;
         inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ session.account ]) as PartialInbox;
 
-        const new_inbox = {
+        const new_inbox: Inbox = {
             id: inbox.id,
             read: [] as Notification[],
             unread: [] as Notification[],
-            requests: {
-                children: [] as Profile[],
-                following: [] as Profile[],
-                followers: [] as Profile[]
-            }
+            outgoing: {
+                children: [] as PendingRequest[],
+                follow: [] as PendingRequest[]
+            },
+            incoming: {
+                children: [] as PendingRequest[],
+                follow: [] as PendingRequest[]
+            },
         }
 
-        for (const u of inbox.requests.children) {
-            const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as PartialProfile;
+        for (const u of inbox.outgoing.children) {
+            const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u.to ]) as PartialProfile;
             const _badge: Badge | null = _user.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ _user.badge ]) as Badge : null;
 
-            new_inbox.requests.children.push(convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations, _badge));
+            new_inbox.outgoing.children.push({
+                from: convertProfile(profile, relations, badge),
+                to: convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations, _badge),
+                date: new Date(u.date)
+            } as PendingRequest);
         }
 
-        for (const u of inbox.requests.following) {
-            const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as PartialProfile;
+        for (const u of inbox.outgoing.follow) {
+            const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u.to ]) as PartialProfile;
             const _badge: Badge | null = _user.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ _user.badge ]) as Badge : null;
 
-            new_inbox.requests.following.push(convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations, _badge));
+            new_inbox.outgoing.follow.push({
+                from: convertProfile(profile, relations, badge),
+                to: convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations, _badge),
+                date: new Date(u.date)
+            } as PendingRequest);
         }
 
-        for (const u of inbox.requests.followers) {
-            const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u ]) as PartialProfile;
+        for (const u of inbox.incoming.children) {
+            const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u.from ]) as PartialProfile;
             const _badge: Badge | null = _user.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ _user.badge ]) as Badge : null;
 
-            new_inbox.requests.followers.push(convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations, _badge));
+            new_inbox.incoming.children.push({
+                from: convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations, _badge),
+                to: convertProfile(profile, relations, badge),
+                date: new Date(u.date)
+            } as PendingRequest);
+        }
+
+        for (const u of inbox.incoming.follow) {
+            const _user = await db.get('SELECT * FROM Users WHERE id = $1;', [ u.from ]) as PartialProfile;
+            const _badge: Badge | null = _user.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ _user.badge ]) as Badge : null;
+
+            new_inbox.incoming.follow.push({
+                from: convertProfile(_user, await db.get('SELECT * FROM Relations WHERE id = $1;', [ _user.id ]) as Relations, _badge),
+                to: convertProfile(profile, relations, badge),
+                date: new Date(u.date)
+            } as PendingRequest);
         }
 
         for (const n of inbox.other) {

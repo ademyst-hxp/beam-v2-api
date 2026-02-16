@@ -57,22 +57,41 @@ export interface NotificationBan extends NotificationBase {
 export type Notification = NotificationSingle | NotificationWarn | NotificationBan | NotificationPost | NotificationComment;
 export type PartialNotification = PartialNotificationSingle | PartialNotificationPost | PartialNotificationComment;
 
+export type PartialPendingRequest = {
+    from: Profile.id
+    to: Profile.id
+    date: string
+}
+
+export type PendingRequest = {
+    from: Profile
+    to: Profile
+    date: Date
+}
+
 export type PartialInbox = {
     id: string
-    requests: {
-        children: Profile.id[]
-        following: Profile.id[]
-        followers: Profile.id[]
+    outgoing: {
+        children: PartialPendingRequest[]
+        follow: PartialPendingRequest[]
+    }
+    incoming: {
+        children: PartialPendingRequest[]
+        follow: PartialPendingRequest[]
     }
     other: PartialNotification[]
 }
 
 export type Inbox = {
     id: string
-    requests: {
-        children: Profile[]
-        following: Profile[]
-        followers: Profile[]
+    outgoing: {
+        children: PendingRequest[]
+        follow: PendingRequest[]
     }
-    other: Notification[]
+    incoming: {
+        children: PendingRequest[]
+        follow: PendingRequest[]
+    }
+    read: Notification[],
+    unread: Notification[]
 }

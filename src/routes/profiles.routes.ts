@@ -10,7 +10,7 @@ import type { Session } from '../db/models/auth.js';
 import type { PartialProfile, Settings, Relations, Profile, Badge } from '../db/models/profiles.js';
 import type { PartialPost, Post } from '../db/models/interactions.js';
 import type { File } from '../db/models/drive.js';
-import type { PartialInbox, PartialNotificationSingle } from '../db/models/inbox.js';
+import type { PartialInbox, PartialNotificationSingle, PartialPendingRequest, PendingRequest } from '../db/models/inbox.js';
 
 const router = Router();
 
@@ -394,6 +394,9 @@ router.post('/:name/follow', async (req: Request, res: Response) => {
         let my_relations: Relations | undefined;
         my_relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ author.id ]) as Relations;
 
+        let my_inbox: PartialInbox | undefined;
+        my_inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ author.id ]) as PartialInbox;
+
 
         let profile: PartialProfile | undefined;
         profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
@@ -447,8 +450,28 @@ router.post('/:name/follow', async (req: Request, res: Response) => {
                 res.status(200).json({ message: 'Success' });
                 return
             } else {
-                inbox.requests.followers.push(author.id);
-                await db.run('UPDATE Inbox SET requests = $1 WHERE id = $2;', [ inbox.requests, profile.id ]);
+                for (const request of inbox.incoming.follow) {
+                    if (request.from === author.id) {
+                        res.status(204).json({ message: 'NoContent' });
+                        return
+                    }
+                }
+
+                my_inbox.outgoing.follow.push({
+                    from: author.id,
+                    to: profile.id,
+                    date: new Date().toISOString()
+                } as PartialPendingRequest);
+
+                await db.run('UPDATE Inbox SET outgoing = $1 WHERE id = $2;', [ my_inbox.outgoing, author.id ]);
+
+                inbox.incoming.follow.push({
+                    from: author.id,
+                    to: profile.id,
+                    date: new Date().toISOString()
+                } as PartialPendingRequest);
+
+                await db.run('UPDATE Inbox SET incoming = $1 WHERE id = $2;', [ inbox.incoming, profile.id ]);
 
                 res.status(202).json({ message: 'Success' });
                 return
@@ -483,6 +506,8 @@ router.post('/:name/unfollow', async (req: Request, res: Response) => {
         let my_relations: Relations | undefined;
         my_relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ author.id ]) as Relations;
 
+        let my_inbox: PartialInbox | undefined;
+        my_inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ author.id ]) as PartialInbox;
 
 
         let profile: PartialProfile | undefined;
@@ -496,6 +521,8 @@ router.post('/:name/unfollow', async (req: Request, res: Response) => {
         let relations: Relations | undefined;
         relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ profile.id ]) as Relations;
 
+        let inbox: PartialInbox | undefined;
+        inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ profile.id ]) as PartialInbox;
 
 
         if (relations.followers.includes(author.id)) {
@@ -508,6 +535,19 @@ router.post('/:name/unfollow', async (req: Request, res: Response) => {
             res.status(200).json({ message: 'Success' });
             return
         } else {
+            for (const request of my_inbox.outgoing.follow) {
+                if (request.from === author.id) {
+                    inbox.incoming.follow = inbox.incoming.follow.filter(_request => (_request.from !== author.id));
+                    await db.run('UPDATE Inbox SET incoming = $1 WHERE id = $2;', [ inbox.incoming, profile.id ]);
+
+                    my_inbox.outgoing.follow = my_inbox.outgoing.follow.filter(_request => (_request.to !== profile.id));
+                    await db.run('UPDATE Inbox SET outgoing = $1 WHERE id = $2;', [ my_inbox.outgoing, author.id ]);
+
+                    res.status(200).json({ message: 'Success' });
+                    return
+                }
+            }
+
             res.status(204).json({ message: 'NoContent' });
             return
         }
@@ -563,40 +603,96 @@ router.post('/:name/accept/follow', async (req: Request, res: Response) => {
             return
         }
 
+        for (const request of my_inbox.incoming.follow) {
+            if (request.from === profile.id) {
+                relations.following.push(author.id);
+                await db.run('UPDATE Relations SET following = $1 WHERE id = $2;', [ relations.following, profile.id ]);
 
-        if (my_inbox.requests.followers.includes(profile.id)) {
-            relations.following.push(author.id);
-            await db.run('UPDATE Relations SET followers = $1 WHERE id = $2;', [ relations.followers, profile.id ]);
+                my_relations.followers.push(profile.id);
+                await db.run('UPDATE Relations SET followers = $1 WHERE id = $2;', [ my_relations.followers, author.id ]);
 
-            my_relations.followers.push(profile.id);
-            await db.run('UPDATE Relations SET following = $1 WHERE id = $2;', [ my_relations.following, author.id ]);
+                my_inbox.incoming.follow = my_inbox.incoming.follow.filter(_request => (_request.from !== profile.id));
+                await db.run('UPDATE Inbox SET incoming = $1 WHERE id = $2;', [ my_inbox.incoming, author.id ]);
 
-            inbox.requests.following = 
-                inbox.requests.following.filter(id => (id !== author.id));
-            await db.run('UPDATE Inbox SET requests = $1 WHERE id = $2;', [ inbox.requests, profile.id ]);
+                inbox.outgoing.follow = inbox.outgoing.follow.filter(_request => (_request.to !== author.id));
+                await db.run('UPDATE Inbox SET outgoing = $1 WHERE id = $2;', [ inbox.outgoing, profile.id ]);
 
-            my_inbox.requests.followers = 
-                my_inbox.requests.followers.filter(id => (id !== profile.id));
-            await db.run('UPDATE Inbox SET requests = $1 WHERE id = $2;', [ my_inbox.requests, author.id ]);
+                const new_notif: PartialNotificationSingle = {
+                    id: genChar(12, 'hex').toUpperCase(),
+                    date: new Date(),
+                    type: 'accept_follow',
+                    isGroupable: false,
+                    read: false,
+                    author: author.id,
+                }
 
-            const new_notif: PartialNotificationSingle = {
-                id: genChar(12, 'hex').toUpperCase(),
-                date: new Date(),
-                type: 'accept_follow',
-                isGroupable: false,
-                read: false,
-                author: author.id,
+                inbox.other.unshift(new_notif)        
+
+                await db.run('UPDATE Inbox SET other = $1 WHERE id = $2;', [ inbox.other, profile.id ])
+
+                res.status(200).json({ message: 'Success' });
+                return
             }
-
-            inbox.other.unshift(new_notif)        
-
-            await db.run('UPDATE Inbox SET other = $1 WHERE id = $2;', [ inbox.other, profile.id ])
-
-            res.status(200).json({ message: 'Success' });
-            return
-        } else {
-            res.status(204).json({ message: 'NoContent' })
         }
+
+        res.status(204).json({ message: 'NoContent' })
+        return
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error' });
+    }
+});
+
+router.post('/:name/reject/follow', async (req: Request, res: Response) => {
+    let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
+    let name: string = req.params.name;
+
+    try {
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
+
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
+        let author: PartialProfile | null;
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
+
+        if (!author) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
+        let my_inbox: PartialInbox | undefined;
+        my_inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ author.id ]) as PartialInbox;
+
+
+        let profile: PartialProfile | undefined;
+        profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
+
+        if (!profile) {
+            res.status(204).json({ message: 'NoContent' });
+            return
+        }
+
+        let inbox: PartialInbox | undefined;
+        inbox = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ profile.id ]) as PartialInbox;
+
+        for (const request of my_inbox.incoming.follow) {
+            if (request.from === profile.id) {
+                my_inbox.incoming.follow = my_inbox.incoming.follow.filter(_request => (_request.from !== profile.id));
+                await db.run('UPDATE Inbox SET incoming = $1 WHERE id = $2;', [ my_inbox.incoming, author.id ]);
+
+                inbox.outgoing.follow = inbox.outgoing.follow.filter(_request => (_request.to !== author.id));
+                await db.run('UPDATE Inbox SET outgoing = $1 WHERE id = $2;', [ inbox.outgoing, profile.id ]);
+
+                res.status(200).json({ message: 'Success' });
+                return
+            }
+        }
+
+        res.status(204).json({ message: 'NoContent' })
+        return
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Error' });
