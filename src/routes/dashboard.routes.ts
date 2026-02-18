@@ -524,6 +524,7 @@ router.get('/feed', async (req: Request, res: Response) => {
             stats += 1.5 * post.reposts;
             stats += 2 * post.comments;
             stats += 5 * (post.author.level - 3); // mise en avant des comptes de confiance
+            stats += 40 * (7 - (new Date().getTime() - post.creation_date.getTime()) / 1000 / 60 / 60 / 24); // mise en avant du contenu récent
 
             return stats;
         }
