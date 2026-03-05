@@ -151,8 +151,7 @@ router.post('/sudo', async (req: Request, res: Response) => {
                 user_generated: true
             };
 
-            await db.run("INSERT INTO Sudo (id, created_at, token, action, account, __expires, user_generated) VALUES ($1, $2, $3, $4, $5, $6, $7)", [
-                randomUUID(),
+            await db.run("INSERT INTO Sudo (created_at, token, action, account, __expires, user_generated) VALUES ($1, $2, $3, $4, $5, $6)", [
                 sudo.created_at,
                 sudo.token,
                 sudo.action,
