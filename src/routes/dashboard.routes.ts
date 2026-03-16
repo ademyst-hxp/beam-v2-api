@@ -575,7 +575,6 @@ router.get('/feed', async (req: Request, res: Response) => {
         }
 
         posts = posts.sort((a, b) => calcStats(b) - calcStats(a));
-        posts = posts.filter((p) => !my_tastes.likes.includes(p.id));
         posts = posts.filter((p) => p.author.id != session!.account);
 
         if (posts.length > limit) {
