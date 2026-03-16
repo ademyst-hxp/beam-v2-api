@@ -1,18 +1,42 @@
 import { Router } from 'express';
-import multer from 'multer';
-import { readFile } from 'fs/promises';
-
 import type { Request, Response } from 'express';
 
-import { db, supabase } from '../db/index.js';
+import multer from 'multer';
+import { readFile } from 'fs/promises';
+import sharp from 'sharp';
+
 import { can_access, genChar } from '../utils/functions.js';
 
+import { db, supabase } from '../db/index.js';
 import type { Session } from '../db/models/auth.js';
 import type { PartialProfile, Settings, Relations } from '../db/models/profiles.js';
 import { File } from '../db/models/drive.js';
 import { PartialPost } from '../db/models/interactions.js';
 
 const router = Router();
+
+function isValidImage(buffer: Buffer): boolean {
+    if (buffer.length < 12) return false;
+
+    // JPEG: FF D8 FF
+    if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) return true;
+    // PNG: 89 50 4E 47 0D 0A 1A 0A
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47 &&
+        buffer[4] === 0x0D && buffer[5] === 0x0A && buffer[6] === 0x1A && buffer[7] === 0x0A) return true;
+    // GIF: GIF87a or GIF89a
+    if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38 &&
+        (buffer[4] === 0x37 || buffer[4] === 0x39) && buffer[5] === 0x61) return true;
+    // WebP: RIFF????WEBP
+    if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+        buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) return true;
+    // BMP: BM
+    if (buffer[0] === 0x42 && buffer[1] === 0x4D) return true;
+    // TIFF: little-endian (II) or big-endian (MM)
+    if ((buffer[0] === 0x49 && buffer[1] === 0x49 && buffer[2] === 0x2A && buffer[3] === 0x00) ||
+        (buffer[0] === 0x4D && buffer[1] === 0x4D && buffer[2] === 0x00 && buffer[3] === 0x2A)) return true;
+
+    return false;
+}
 
 router.get('/:id', async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
@@ -93,35 +117,61 @@ router.post('/upload/attachment', file_upload.single('file'),async (req: Request
 
         const post: PartialPost | undefined = await db.get('SELECT * FROM Posts WHERE id = $1;', [ post_id ]) as PartialPost;
 
-        if (post_id && !post) {
-            res.status(404).json({ message: 'PostNotFound' });
-            return
+        if (post_id) {
+            if (!post) {
+                res.status(404).json({ message: 'PostNotFound' });
+                return
+            }
+
+            if (post.author_id !== session.account) {
+                res.status(403).json({ message: 'Forbidden' });
+                return
+            }
+
+            if (post.attachments.length >= 4) {
+                res.status(400).json({ message: 'AttachmentLimitReached' });
+                return
+            }
         }
 
+        // override specified visibility if the file is attached to a post
         visibility = post ? post.visibility : visibility;
         ephemeral = post ? false : ephemeral;
-        // override specified visibility if the file is attached to a post
 
 
         const file_buffer = await readFile(file_data!.path);
 
+        if (!isValidImage(file_buffer)) {
+            res.status(400).json({ message: 'InvalidImageFile' });
+            return
+        }
+
+        const webp_buffer = await sharp(file_buffer).webp().toBuffer();
+
         const file_id = genChar(12, 'hex');
+
+        try {
+            await supabase.storage.from('files').upload(`/attachments/${session.account.toLowerCase()}/${file_id.toLowerCase()}`, webp_buffer, {
+                contentType: 'image/webp',
+                upsert: true
+            });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ message: 'Error uploading file' });
+            return
+        }
 
         await db.run('INSERT INTO Files (id, author_id, path, type, visibility, ephemeral, creation_date, update_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT(id) DO UPDATE SET type = $4, update_date = $8;', [
             file_id,
             session.account,
             `/attachments/${session.account.toLowerCase()}/${file_id.toLowerCase()}`,
-            file_data?.mimetype || 'image/png',
+            'image/webp',
             visibility,
             ephemeral,
             new Date(),
             null
         ]);
 
-        await supabase.storage.from('files').upload(`/attachments/${session.account.toLowerCase()}/${file_id.toLowerCase()}`, file_buffer, {
-            contentType: file_data?.mimetype || 'image/png',
-            upsert: true
-        });
 
         if (post) {
             let attachments: string[] = post.attachments;

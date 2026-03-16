@@ -1,20 +1,44 @@
 import { Router } from 'express';
-import multer from 'multer';
-import { readFile } from 'fs/promises';
-
 import type { Request, Response } from 'express';
 
-import { db, supabase } from '../db/index.js';
-import { can_access, convert } from '../utils/functions.js';
+import multer from 'multer';
+import { readFile } from 'fs/promises';
+import sharp from 'sharp';
+
+import { can_access } from '../utils/functions.js';
 import { convertPost, convertProfile } from '../utils/converters.js';
 
+import { db, supabase } from '../db/index.js';
 import type { Session } from '../db/models/auth.js';
-import type { Badge, PartialProfile, Profile, Settings, Relations, Tastes } from '../db/models/profiles.js'
+import type { Badge, PartialProfile, Settings, Relations, Tastes } from '../db/models/profiles.js'
 import type { PartialPost, Post } from '../db/models/interactions.js';
 import type { PartialInbox, Inbox } from '../db/models/inbox.js';
 import type { Notification, PendingRequest } from '../db/models/inbox.js';
 
 const router = Router();
+
+function isValidImage(buffer: Buffer): boolean {
+    if (buffer.length < 12) return false;
+
+    // JPEG: FF D8 FF
+    if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) return true;
+    // PNG: 89 50 4E 47 0D 0A 1A 0A
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47 &&
+        buffer[4] === 0x0D && buffer[5] === 0x0A && buffer[6] === 0x1A && buffer[7] === 0x0A) return true;
+    // GIF: GIF87a or GIF89a
+    if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38 &&
+        (buffer[4] === 0x37 || buffer[4] === 0x39) && buffer[5] === 0x61) return true;
+    // WebP: RIFF????WEBP
+    if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+        buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) return true;
+    // BMP: BM
+    if (buffer[0] === 0x42 && buffer[1] === 0x4D) return true;
+    // TIFF: little-endian (II) or big-endian (MM)
+    if ((buffer[0] === 0x49 && buffer[1] === 0x49 && buffer[2] === 0x2A && buffer[3] === 0x00) ||
+        (buffer[0] === 0x4D && buffer[1] === 0x4D && buffer[2] === 0x00 && buffer[3] === 0x2A)) return true;
+
+    return false;
+}
 
 router.get('/', async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
@@ -453,19 +477,26 @@ router.post('/avatar', avatar_upload.single('avatar'),async (req: Request, res: 
 
         const file_buffer = await readFile(avatar_data!.path);
 
+        if (!isValidImage(file_buffer)) {
+            res.status(400).json({ message: 'InvalidImageFile' });
+            return
+        }
+
+        const webp_buffer = await sharp(file_buffer).webp().toBuffer();
+
         await db.run('INSERT INTO Files (id, author_id, path, type, visibility, ephemeral, creation_date, update_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT(id) DO UPDATE SET type = $4, update_date = $8;', [
             session.account,
             session.account,
             `/avatars/${session.account}`,
-            avatar_data?.mimetype || 'image/png',
+            'image/webp',
             'everyone',
             false,
             new Date(),
             new Date()
         ]);
 
-        await supabase.storage.from('profiles').upload(`/avatars/${session.account}`, file_buffer, {
-            contentType: avatar_data?.mimetype || 'image/png',
+        await supabase.storage.from('profiles').upload(`/avatars/${session.account}`, webp_buffer, {
+            contentType: 'image/webp',
             upsert: true
         });
 

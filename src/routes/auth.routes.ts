@@ -1,15 +1,15 @@
 import { Router } from 'express';
+import type { Request, Response } from 'express';
+
 import bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 
-import type { Request, Response } from 'express';
-
-import { db } from '../db/index.js';
 import { genChar } from '../utils/functions.js';
 
+import { db } from '../db/index.js';
 import type { Session, Account } from '../db/models/auth.js';
 import type { PartialProfile, Settings, Relations, Tastes } from '../db/models/profiles.js';
-import type { Inbox, PartialInbox } from '../db/models/inbox.js';
+import type { PartialInbox } from '../db/models/inbox.js';
 
 const router = Router();
 
@@ -174,7 +174,7 @@ router.post('/sudo', async (req: Request, res: Response) => {
 router.post('/signup', async (req: Request, res: Response) => {
     let username: string = req.body.username;
     let display_name: string | null = req.body.display_name || null;
-    let birthday: Date | null = new Date(req.body.birthday) || null;
+    let birthday: Date = req.body.birthday;
 
     let email: string = req.body.email;
     let password: string = req.body.password ?? true;
@@ -209,6 +209,18 @@ router.post('/signup', async (req: Request, res: Response) => {
         }
 
         if (
+            password.length < 8
+            ||!/[A-Z]/.test(password)
+            || !/[a-z]/.test(password)
+            || !/[0-9]/.test(password)
+            || !/[!@#$%^&*(),.?":{}|<>]/.test(password)
+            || /\s/.test(password)
+        ) {
+            res.status(400).json({ message: 'WeakPassword' });
+            return
+        }
+
+        if (
             username.length < 3 ||
             username.length > 16 ||
             !/^[a-z0-9._]+$/.test(username)
@@ -228,6 +240,13 @@ router.post('/signup', async (req: Request, res: Response) => {
             display_name && display_name.length > 30
         ) {
             res.status(400).json({ message: 'InvalidDisplayName' });
+            return
+        }
+
+        try {
+            birthday = new Date(birthday);
+        } catch (err) {
+            res.status(400).json({ message: 'InvalidBirthday' });
             return
         }
 
@@ -347,7 +366,7 @@ router.post('/signup', async (req: Request, res: Response) => {
             update_date: new Date(),
             status: null,
             description: null,
-            birthday: birthday ? birthday : null,
+            birthday: birthday,
             pronouns: null,
             account_type: null,
             badge: null,

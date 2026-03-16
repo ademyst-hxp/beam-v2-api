@@ -1,3 +1,5 @@
+import { Flag } from "./moderation.js"
+
 export type Badge = {
 	id: string
 	title: string
@@ -22,7 +24,7 @@ export type PartialProfile = {
 
 	badge: string | null
 	level: number
-	flags: string[]
+	flags: Flag[]
 }
 
 export type Profile = {

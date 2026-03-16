@@ -1,43 +1,10 @@
 import crypto from 'crypto';
 
-import { PartialProfile, Settings, Relations } from '../db/models/profiles.js';
+import { PartialProfile, Relations } from '../db/models/profiles.js';
 import type { Session } from '../db/models/auth.js';
 
 export const genChar = (size: number, base: BufferEncoding): string => {
 	return crypto.randomBytes(size).toString(base);
-}
-
-export const convert = (obj: Record<string, any>) => {
-	let keys = Object.keys(obj);
-	let data: Record<string, any> = {};
-
-	for (const k of keys) {
-		let v = obj[k];
-
-		if (v instanceof Array || v instanceof Object || typeof v === 'boolean') data[k] = JSON.stringify(v)
-		else data[k] = v;
-	}
-
-	return data
-}
-
-export const parse = (obj: Record<string, any> | undefined) => {
-	if (!obj) return undefined;
-
-	let keys = Object.keys(obj);
-	let data: Record<string, any> = {};
-
-	for (const k of keys) {
-		let v = obj[k];
-
-		try {
-			data[k] = JSON.parse(v);
-		} catch {
-			data[k] = v;
-		}
-	}
-
-	return data
 }
 
 export const can_access = (value: string, profile: PartialProfile, relations: Relations, author: Session | null): boolean => {
@@ -51,4 +18,11 @@ export const can_access = (value: string, profile: PartialProfile, relations: Re
         case 'everyone': return true;
         default: return false;
     }
+}
+
+export const calcAge = (date: Date): number => {
+	const diff = Date.now() - date.getTime();
+	const age = new Date(diff);
+
+	return Math.abs(age.getUTCFullYear() - 1970);
 }

@@ -35,6 +35,7 @@ export type Post = {
 	comments: number
 
 	tags: string[]
+	flags: string[]
 }
 
 export type Comment = {

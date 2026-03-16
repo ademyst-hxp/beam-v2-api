@@ -1,0 +1,1 @@
+export type Flag = 'NFE' | 'spam' | 'harassment' | 'suspicious' | 'suicide' | 'AI';

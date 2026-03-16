@@ -23,7 +23,7 @@ export const convertPost = async (
     },
     author: Profile
 ): Promise<Post> => {
-    let { flags, attachments, ...p } = post
+    let { attachments, ...p } = post
 
 
     const _attachments = await db.all('SELECT * FROM Files WHERE id = ANY($1);', [ attachments ]) || [] as File[]

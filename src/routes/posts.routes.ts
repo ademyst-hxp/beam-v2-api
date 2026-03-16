@@ -1,23 +1,21 @@
-import { Router, text } from 'express';
-
+import { Router } from 'express';
 import type { Request, Response } from 'express';
-import he from 'he'
 
-import { db } from '../db/index.js';
-import { can_access, genChar } from '../utils/functions.js';
+import { calcAge, can_access, genChar } from '../utils/functions.js';
 import { convertComment, convertPost, convertProfile } from '../utils/converters.js';
 
+import { db } from '../db/index.js';
 import type { Session } from '../db/models/auth.js';
 import type { Comment, PartialComment, PartialPost, Post } from '../db/models/interactions.js';
 import type { PartialProfile, Settings, Relations, Tastes, Badge } from '../db/models/profiles.js';
-import type { PartialInbox, PartialNotificationSingle, PartialNotificationPost } from '../db/models/inbox.js';
+import type { PartialInbox, PartialNotificationPost } from '../db/models/inbox.js';
 
 const router = Router();
 
 router.get('/fetch', async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
 
-    let query: string = req.query.q as string;
+    let query: string | null = req.query.q as string || null;
     let author: string = req.query.author as string;
     let before: string = new Date(req.query.before as string || new Date().toISOString()).toISOString();
     let after: string = new Date(req.query.after as string || new Date(0).toISOString()).toISOString();
@@ -30,8 +28,27 @@ router.get('/fetch', async (req: Request, res: Response) => {
             return
         }
 
+        let me: PartialProfile | null;
+        me = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
+
+        if (!me) {
+            res.status(404).json({ message: 'UserNotFound' });
+            return
+
+            // me = undefined
+        }
+
+
         let posts: Post[] = [];
-        let _result: PartialPost[] = await db.all('SELECT * FROM Posts WHERE content ILIKE $1 AND creation_date < $2 AND creation_date > $3 ORDER BY creation_date DESC;', [ `%${query}%`, before, after ]) as PartialPost[];
+        let _result: PartialPost[] = [];
+
+        if (query) {
+            _result = await db.all('SELECT * FROM Posts WHERE content ILIKE $1 AND creation_date < $2 AND creation_date > $3 ORDER BY creation_date DESC;', [ `%${query}%`, before, after ]) as PartialPost[];
+            console.log(`Fetched ${_result.length} posts from the database`)
+        } else {
+            _result = await db.all('SELECT * FROM Posts WHERE creation_date < $1 AND creation_date > $2 ORDER BY creation_date DESC;', [ before, after ]) as PartialPost[];
+            console.log(`Fetched ${_result.length} posts from the database`)
+        }
 
         let author_profile: PartialProfile | null;
 
@@ -54,7 +71,11 @@ router.get('/fetch', async (req: Request, res: Response) => {
 
             const profile: PartialProfile | undefined = await db.get('SELECT * FROM Users WHERE id = $1;', [ p.author_id ]) as PartialProfile;
 
-            if (profile && can_access(p.visibility, profile, relations, session)) {
+            if (
+                profile
+                && can_access(p.visibility, profile, relations, session)
+                && (!p.flags.includes('NFE') || calcAge(me?.birthday || new Date()) >= 18 || profile.id === me?.id)
+            ) {
                 posts.push(await convertPost(
                     p,
                     {
@@ -100,7 +121,15 @@ router.get('/:id', async (req: Request, res: Response) => {
         }
 
         let profile: PartialProfile | undefined;
-        profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as PartialProfile;
+
+        if (post.tags.includes('NFE') && calcAge(author.birthday || new Date()) < 18) {
+            post.content = '';
+            post.attachments = [];
+            profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ 'ghost' ]) as PartialProfile;
+        } else {
+            profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as PartialProfile;
+        }
+
 
         if (!profile) {
             res.status(403).json({ message: 'PrivateAccount' });
@@ -146,6 +175,7 @@ router.get('/:id', async (req: Request, res: Response) => {
             convertProfile(profile, relations, badge)
         )
 
+
         res.status(200).json(data)
     } catch(err) {
         console.error(err);
@@ -183,10 +213,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
             return
         }
 
-        let profile: PartialProfile | undefined;
-        profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as PartialProfile;
-
-        if (author.level >= 6 || (profile && post.author_id == profile.id)) {
+        if (author.level >= 6 || (author && post.author_id == author.id)) {
             await db.run('DELETE FROM Posts WHERE id = $1;', [ id ]);
             await db.run('DELETE FROM Files WHERE id = ANY($1);', [ post.attachments ]);
             await db.run('DELETE FROM Comments WHERE post_id = $1;', [ id ]);
@@ -473,6 +500,67 @@ router.post('/:id/report', async (req: Request, res: Response) => {
     }
 });
 
+router.put('/:id/edit_flags', async (req: Request, res: Response) => {
+    const id = req.params.id
+
+    let flags: string[] | Record<string, boolean> = req.body.flags || [];
+
+    if (typeof flags === 'object' && !Array.isArray(flags)) {
+        const _flags: string[] = [];
+
+        for (const [ key, value ] of Object.entries(flags)) {
+            if (value) _flags.push(key);
+        }
+
+        flags = _flags;
+    }
+
+    let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
+
+    try {
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
+
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
+        let author: PartialProfile | null;
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
+
+        if (!author) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
+        if (author.level < 6) {
+            res.status(403).json({ message: 'Forbidden' });
+            return
+        }
+
+
+        let post: any;
+        post = await db.get('SELECT * FROM Posts WHERE id = $1;', [ id ]);
+
+        if (!post) {
+            res.status(404).json({ message: 'PostNotFound' });
+            return
+        }
+
+        // const added_flags = flags.filter((f: string) => !post.flags.includes(f));
+        // const removed_flags = post.flags.filter((f: string) => !flags.includes(f));
+
+        post.flags = Array.from(new Set([ ...(post.flags || []), ...flags ]));
+
+        await db.run('UPDATE Posts SET flags = $1 WHERE id = $2;', [ post.flags, post.id ])
+
+        res.status(200).json({ message: 'Success' })
+    } catch(err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error' });
+    }
+});
+
 router.get('/:id/comments', async (req: Request, res: Response) => {
     const id = req.params.id
 
@@ -480,6 +568,9 @@ router.get('/:id/comments', async (req: Request, res: Response) => {
 
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
+
+        let author: PartialProfile | null;
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
 
         let post: PartialPost | null;
         post = await db.get('SELECT * FROM Posts WHERE id = $1;', [ id ]) as PartialPost;
@@ -497,8 +588,16 @@ router.get('/:id/comments', async (req: Request, res: Response) => {
         let _result: PartialComment[] = await db.all('SELECT * FROM Comments WHERE post_id = $1 ORDER BY creation_date DESC;', [ id ]) as PartialComment[];
 
         for (const c of _result) {
-            const __profile: PartialProfile | undefined = await db.get('SELECT * FROM Users WHERE id = $1;', [ c.author_id ]) as PartialProfile;
-            const __relations: Relations | undefined = await db.get('SELECT * FROM Relations WHERE id = $1;', [ c.author_id ]) as Relations;
+            let __profile: PartialProfile | undefined;
+
+            if (c.flags.includes('NFE') && calcAge(author?.birthday || new Date()) < 18) {
+                c.content = '';
+                __profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ 'ghost' ]) as PartialProfile;
+            } else {
+                __profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ post.author_id ]) as PartialProfile;
+            }
+
+            const __relations: Relations | undefined = await db.get('SELECT * FROM Relations WHERE id = $1;', [ __profile.id ]) as Relations;
             const __badge: Badge | null = __profile.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ __profile.badge ]) as Badge : null;
 
             const is_visible = (field: string) => can_access(field, profile, relations, session)
@@ -538,6 +637,8 @@ router.post('/new', async (req: Request, res: Response) => {
     const visibility: PartialPost['visibility'] = req.body.visibility
     const answers_to: string | null = req.body.answers_to || null
 
+    const is_nudity: boolean = req.query.is_nudity === 'true' || false;
+    const is_ai: boolean = req.query.is_ai === 'true' || false;
 
     try {
         let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
@@ -590,7 +691,10 @@ router.post('/new', async (req: Request, res: Response) => {
             update_date: null,
             likes: 0,
             tags: tags,
-            flags: []
+            flags: [
+                ...(is_nudity ? ['NFE'] : []),
+                ...(is_ai ? ['AI'] : [])
+            ]
         }
 
         if (answers_to) {

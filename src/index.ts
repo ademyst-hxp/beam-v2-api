@@ -6,7 +6,6 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 
 import { db } from './db/index.js';
-import { parse } from './utils/functions.js';
 import type { Session } from './db/models/auth.js';
 
 import authRoute from './routes/auth.routes.js';
@@ -43,13 +42,26 @@ app.use(async (req, res, next) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
 
     if (token) {
-        let session: Session | null = parse(await db.get('SELECT * FROM Sessions WHERE token = $1', [ token ])) as Session;
+        let session: Session | null = await db.get('SELECT * FROM Sessions WHERE token = $1', [ token ]) as Session;
 
         if (session) {
             await db.run('UPDATE Sessions SET last_activity = $1 WHERE id = $2', [ new Date().toISOString(), session.id ]);
+
+            const profile = await db.get('SELECT * FROM Users WHERE id = $1', [ session.account ]);
+
+            if (profile) {
+                if (profile.level == 0) {
+                    res.clearCookie('token');
+                    return res.status(403).json({ error: 'BannedResponse' });
+                }
+            } else {
+                res.clearCookie('token');
+            }
         } else {
             res.clearCookie('token');
         }
+    } else if (req.path !== '/auth/login' && req.path !== '/auth/register') {
+        return res.status(401).json({ error: 'Unauthorized' });
     }
 
     next();

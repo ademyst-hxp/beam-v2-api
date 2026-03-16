@@ -1,16 +1,15 @@
 import { Router } from 'express';
 
 import type { Request, Response } from 'express';
-import he from 'he'
+
+import { can_access, genChar } from '../utils/functions.js';
+import { convertComment, convertPost, convertProfile } from '../utils/converters.js';
 
 import { db } from '../db/index.js';
-import { can_access, genChar } from '../utils/functions.js';
-
 import type { Session } from '../db/models/auth.js';
-import type { PartialPost, PartialComment, Comment, Post } from '../db/models/interactions.js';
-import type { Badge, PartialProfile, Settings, Relations, Tastes } from '../db/models/profiles.js';
-import type { PartialInbox, PartialNotificationPost, NotificationSingle, PartialNotificationComment } from '../db/models/inbox.js';
-import { convertComment, convertPost, convertProfile } from '../utils/converters.js';
+import type { PartialPost, PartialComment, Comment } from '../db/models/interactions.js';
+import type { Badge, PartialProfile, Settings, Relations } from '../db/models/profiles.js';
+import type { PartialInbox, PartialNotificationComment } from '../db/models/inbox.js';
 
 const router = Router();
 
@@ -150,10 +149,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
             return
         }
 
-        let profile: PartialProfile | undefined;
-        profile = await db.get('SELECT * FROM Users WHERE id = $1;', [ comment.author_id ]) as PartialProfile;
-
-        if (author.level >= 6 || (profile && comment.author_id == profile.id)) {
+        if (author.level >= 6 || (author && comment.author_id == author.id)) {
             await db.run('DELETE FROM Comments WHERE id = $1;', [ id ]);
         } else {
             res.status(403).json({ message: 'Forbidden' })

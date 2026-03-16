@@ -2,13 +2,13 @@ import { Router } from 'express';
 
 import type { Request, Response } from 'express';
 
-import { db } from '../db/index.js';
-import { can_access, convert } from '../utils/functions.js';
+import { can_access } from '../utils/functions.js';
+import { convertPost, convertProfile } from '../utils/converters.js';
 
+import { db } from '../db/index.js';
 import type { Session } from '../db/models/auth.js';
 import type { Badge, PartialProfile, Profile, Relations, Tastes } from '../db/models/profiles.js'
 import { PartialPost, Post } from '../db/models/interactions.js';
-import { convertPost, convertProfile } from '../utils/converters.js';
 
 const router = Router();
 
@@ -37,6 +37,8 @@ router.get('/users', async (req: Request, res: Response) => {
             parseInt(req.query.offset as string) || 0,
             parseInt(req.query.limit as string) || users.length
         );
+
+        users = users.filter(u => u.level >= 3);
 
         res.status(200).json(users);
         return
@@ -98,7 +100,7 @@ router.get('/posts', async (req: Request, res: Response) => {
                 convertProfile(profile, relations, badge)
             )
 
-            if (is_visible(p.visibility) && !my_relations.blocklist.includes(new_p.author.id)) {
+            if (is_visible(p.visibility) && !my_relations.blocklist.includes(new_p.author.id) && new_p.author.level >= 3) {
                 posts.push(new_p)
             }
         }

@@ -1,16 +1,15 @@
 import { Router } from 'express';
-
 import type { Request, Response } from 'express';
 
-import { db, supabase } from '../db/index.js';
 import { can_access, genChar } from '../utils/functions.js';
 import { convertPost, convertProfile } from '../utils/converters.js';
 
+import { db, supabase } from '../db/index.js';
 import type { Session } from '../db/models/auth.js';
 import type { PartialProfile, Settings, Relations, Profile, Badge } from '../db/models/profiles.js';
 import type { PartialPost, Post } from '../db/models/interactions.js';
 import type { File } from '../db/models/drive.js';
-import type { PartialInbox, PartialNotificationSingle, PartialPendingRequest, PendingRequest } from '../db/models/inbox.js';
+import type { PartialInbox, PartialNotificationSingle, PartialPendingRequest } from '../db/models/inbox.js';
 
 const router = Router();
 
@@ -195,6 +194,14 @@ router.get('/:name/following', async (req: Request, res: Response) => {
             return
         }
 
+        let author: PartialProfile | undefined
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
+
+        if (!author) {
+            res.status(404).json({ message: 'UserNotFound' });
+            return
+        }
+
         let profile: PartialProfile | undefined;
         profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
 
@@ -229,7 +236,12 @@ router.get('/:name/following', async (req: Request, res: Response) => {
             new_following.push(new_p);
         }
 
-        res.status(200).json(new_following);
+        if (author.level >= 3) {
+            res.status(200).json(new_following.filter(u => u.level >= 3));
+        } else {
+            res.status(200).json([]);
+        }
+
         return
     } catch (err) {
         console.error(err);
@@ -249,6 +261,9 @@ router.get('/:name/followers', async (req: Request, res: Response) => {
             res.status(401).json({ message: 'Unauthorized' });
             return
         }
+
+        let author: PartialProfile | undefined
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
 
         let profile: PartialProfile | undefined;
         profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
@@ -284,7 +299,11 @@ router.get('/:name/followers', async (req: Request, res: Response) => {
             new_followers.push(new_p);
         }
 
-        res.status(200).json(new_followers);
+        if (author.level >= 3) {
+            res.status(200).json(new_followers.filter(u => u.level >= 3));
+        } else {
+            res.status(200).json([]);
+        }
         return
     } catch (err) {
         console.error(err);
@@ -293,81 +312,8 @@ router.get('/:name/followers', async (req: Request, res: Response) => {
 });
 
 router.get('/:name/posts', async (req: Request, res: Response) => {
-    let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
     let name: string = req.params.name;
-
-    try {
-        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
-
-        if (!session) {
-            res.status(401).json({ message: 'Unauthorized' });
-            return
-        }
-
-        let profile: PartialProfile | undefined;
-        profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
-
-        if (!profile) {
-            res.status(404).json({ message: 'UserNotFound' });
-            return
-        }
-
-        let relations: Relations | undefined;
-        relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ profile.id ]) as Relations;
-
-        let settings: Settings | undefined;
-        settings = await db.get('SELECT * FROM Settings WHERE id = $1;', [ profile.id ]) as Settings;
-
-        const badge: Badge | null = profile.badge ? await db.get('SELECT * FROM Badges WHERE id = $1;', [ profile.badge ]) as Badge : null;
-
-        const is_visible = (field: string) => can_access(field, profile, relations, session)
-
-        if (!is_visible(settings.privacy.birthday)) {
-            profile.birthday = null;
-        }
-
-        if (!is_visible(settings.privacy.status)) {
-            profile.status = null;
-        }
-
-        if (!is_visible(settings.privacy.profile)) {
-            profile.pronouns = null;
-        }
-
-
-
-        let posts: any[] | undefined = [];
-        let _result: any[] = await db.all('SELECT * FROM Posts WHERE author_id = $1;', [ profile.id ]) as PartialPost[];
-
-        for (const p of _result) {
-            const reposts = await db.get(`SELECT COUNT(*) FROM Posts WHERE parent_id = $1;`, [ p.id ]);
-            const comments = await db.get(`SELECT COUNT(*) FROM Comments WHERE post_id = $1;`, [ p.id ]);
-
-            let new_p: Post = await convertPost(
-                p,
-                { reposts: reposts.count, comments: comments.count },
-                convertProfile(profile, relations, badge)
-            )
-
-            if (is_visible(p.visibility)) {
-                posts.push(new_p)
-            }
-        }
-
-        posts = posts.sort((a, b) => new Date(b.creation_date).getTime() - new Date(a.creation_date).getTime());
-
-
-        if (is_visible(settings.privacy.profile)) {
-            res.status(200).json(posts);
-            return
-        } else {
-            res.status(206).json([]);
-            return
-        }
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Error' });
-    }
+    res.redirect(`/posts/fetch?author=${name}`)
 });
 
 
@@ -427,7 +373,7 @@ router.post('/:name/follow', async (req: Request, res: Response) => {
             res.status(204).json({ message: 'NoContent' });
             return
         } else {
-            if (is_visible(settings.privacy.profile)) {
+            if (is_visible(settings.privacy.profile) && author.level >= 3) {
                 relations.followers.push(author.id);
                 await db.run('UPDATE Relations SET followers = $1 WHERE id = $2;', [ relations.followers, profile.id ]);
 
