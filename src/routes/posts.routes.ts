@@ -770,4 +770,120 @@ router.post('/new', async (req: Request, res: Response) => {
     }
 });
 
+router.put('/:id/edit', async (req: Request, res: Response) => {
+    let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
+
+    const id = req.params.id
+
+    const content: string = req.body.content
+    const visibility: PartialPost['visibility'] = req.body.visibility
+
+    const is_nudity: boolean = req.query.is_nudity === 'true' || false;
+    const is_ai: boolean = req.query.is_ai === 'true' || false;
+
+    try {
+        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
+
+        if (!session) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
+        let author: PartialProfile | null;
+        author = await db.get('SELECT * FROM Users WHERE id = $1;', [ session.account ]) as PartialProfile;
+
+        if (!author) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return
+        }
+
+        let relations: Relations | null;
+        relations = await db.get('SELECT * FROM Relations WHERE id = $1;', [ session.account ]) as Relations;
+
+        let badge: Badge | null = null;
+
+        if (author.badge) {
+            badge = await db.get('SELECT * FROM Badges WHERE id = $1;', [ author.badge ]) as Badge;
+        }
+
+
+        /* Limitations & sécurité */
+        if (content.length > (author.level >= 5 ? 2000 : author.level >= 4 ? 1000 : 500)) {
+            res.status(413).json({ message: 'PostTooLong' });
+            return;
+        }
+
+        /* Enregistrement du post */
+        const tags = [...content.matchAll(/#([\p{L}\p{N}_]+)/gu)]
+            .map(match => match[1]);
+
+        let post: PartialPost;
+        post = await db.get('SELECT * FROM Posts WHERE id = $1;', [ id ]) as PartialPost;
+
+        if (!post) {
+            res.status(404).json({ message: 'PostNotFound' });
+            return
+        }
+
+        if (post.author_id !== author.id) {
+            res.status(403).json({ message: 'Forbidden' });
+            return
+        }
+
+        post.content = content;
+        post.visibility = visibility;
+        post.update_date = new Date();
+        post.tags = tags;
+
+        // On empêche les utilisateurs de retirer les flags eux-mêmes
+        if (is_nudity && !post.flags.includes('NFE')) post.flags.push('NFE');
+        if (is_ai && !post.flags.includes('AI')) post.flags.push('AI');
+
+        const mentions = [...content.matchAll(/@([a-z0-9._]+)/gu)]
+            .map(match => match[1]);
+
+        for (const mention of mentions) {
+            const mentioned_profile: PartialProfile | undefined = await db.get('SELECT * FROM Users WHERE name = $1;', [ mention ]) as PartialProfile;
+
+            if (mentioned_profile) {
+                const mentioned_relations: Relations | undefined = await db.get('SELECT * FROM Relations WHERE id = $1;', [ mentioned_profile.id ]) as Relations;
+                const mentioned_settings: Settings | undefined = await db.get('SELECT * FROM Settings WHERE id = $1;', [ mentioned_profile.id ]) as Settings;
+
+                const is_visible = (field: string) => can_access(field, mentioned_profile!, mentioned_relations, session)
+
+                if (is_visible(mentioned_settings.privacy.profile)) {
+                    const mentioned_inbox: PartialInbox | undefined = await db.get('SELECT * FROM Inbox WHERE id = $1;', [ mentioned_profile.id ]) as PartialInbox;
+
+                    const new_notif: PartialNotificationPost = {
+                        id: genChar(12, 'hex').toUpperCase(),
+                        date: new Date(),
+                        type: 'mention',
+                        isGroupable: false,
+                        read: false,
+                        author: author.id,
+                        target: post!.id,
+                    }
+
+                    mentioned_inbox.other.unshift(new_notif)
+
+                    await db.run('UPDATE Inbox SET other = $1 WHERE id = $2;', [ mentioned_inbox.other, mentioned_profile.id ]);
+                }
+            }
+        }
+
+        await db.run('UPDATE Posts SET content = $1, visibility = $2, update_date = $3, tags = $4, flags = $5 WHERE id = $6;', [ post.content, post.visibility, post.update_date, post.tags, post.flags, post.id ]);
+
+        const data: Post = await convertPost(
+            post,
+            { reposts: 0, comments: 0 },
+            convertProfile(author, relations, badge)
+        )
+
+        res.status(200).json(data)
+    } catch(err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error' });
+    }
+});
+
 export default router;
