@@ -23,14 +23,8 @@ router.get("/users", async (req: Request, res: Response) => {
 		let users: Profile[] = [];
 		let stats: Record<string, { likes: number }> = {};
 
-		let pre = (await db.all(
-			"SELECT * FROM Sessions WHERE last_activity > $1;",
-			[new Date(Date.now() - 1000 * 60 * 60 * 24 * 56)],
-		)) as Session[];
-
 		let _result: PartialProfile[] = (await db.all(
-			"SELECT * FROM Users WHERE id = ANY($1);",
-			[pre.map((s) => s.account)],
+			"SELECT * FROM Users;",
 		)) as PartialProfile[];
 
 		for (const u of _result) {
