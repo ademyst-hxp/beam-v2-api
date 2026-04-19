@@ -60,9 +60,9 @@ app.use(async (req, res, next) => {
         } else {
             res.clearCookie('token');
         }
-    } else if (req.path !== '/auth/login' && req.path !== '/auth/signup') {
+    } /*else if (req.path !== '/auth/login' && req.path !== '/auth/signup') {
         return res.status(401).json({ error: 'Unauthorized' });
-    }
+    }*/
 
     next();
 

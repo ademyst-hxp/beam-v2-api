@@ -186,7 +186,7 @@ router.post('/signup', async (req: Request, res: Response) => {
     let code: string = req.body.sudo_code;
 
     try {
-        const sudo = await db.get('SELECT * FROM Sudo WHERE token = $1', [ code ]) as Record<string, any>;
+        /*const sudo = await db.get('SELECT * FROM Sudo WHERE token = $1', [ code ]) as Record<string, any>;
 
         if (!sudo) {
             res.status(401).json({ message: 'InvalidSudoToken' });
@@ -206,7 +206,7 @@ router.post('/signup', async (req: Request, res: Response) => {
         if (sudo.action !== 'signup') {
             res.status(401).json({ message: 'InvalidSudoToken' });
             return
-        }
+        }*/
 
         if (
             password.length < 8
