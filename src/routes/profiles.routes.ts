@@ -52,7 +52,7 @@ router.get('/:name', async (req: Request, res: Response) => {
     let name: string = req.params.name;
 
     try {
-        let session: Session | null = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) || null;
+        let session: Session | null = (await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session) || null;
 
         let profile: PartialProfile | undefined;
         profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
@@ -102,7 +102,7 @@ router.get('/:name/avatar.png', async (req: Request, res: Response) => {
     let name: string = req.params.name;
 
     try {
-        let session: Session | null = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) || null;
+        let session: Session | null = (await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session) || null;
 
         let _profile: PartialProfile | undefined;
         _profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;

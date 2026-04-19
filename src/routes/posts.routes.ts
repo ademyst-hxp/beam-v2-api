@@ -166,7 +166,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 		let session: Session | null = (await db.get(
 			"SELECT * FROM Sessions WHERE token = $1;",
 			[token],
-		)) || null;
+		)) as Session || null;
 
 		let author: PartialProfile | null;
 		author = (await db.get("SELECT * FROM Users WHERE id = $1;", [

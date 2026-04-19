@@ -46,7 +46,7 @@ router.get('/posts', async (req: Request, res: Response) => {
     let order_by = req.query.sort_by || 'stats'
 
     try {
-        let session: Session | null = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) || null;
+        let session: Session | null = (await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session) || null;
 
         let my_relations: Relations | undefined;
         let my_tastes: Tastes | undefined;
