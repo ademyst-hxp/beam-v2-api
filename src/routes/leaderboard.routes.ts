@@ -156,6 +156,7 @@ router.get("/posts", async (req: Request, res: Response) => {
 				{ reposts: reposts.count, comments: comments.count },
 				convertProfile(profile, relations, badge),
 			);
+		}
 
 
 		if (order_by == "date") {
