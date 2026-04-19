@@ -171,7 +171,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 		let author: PartialProfile | null;
 		author = (await db.get("SELECT * FROM Users WHERE id = $1;", [
 			session?.account,
-		])) || null;
+		]) as PartialProfile) || null;
 
 		let post: PartialPost | null;
 		post = (await db.get("SELECT * FROM Posts WHERE id = $1;", [
