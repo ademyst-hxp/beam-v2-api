@@ -44,6 +44,7 @@ router.get('/users', async (req: Request, res: Response) => {
 router.get('/posts', async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
     let order_by = req.query.sort_by || 'stats'
+	let category = req.query.category || 'all';
 
     try {
         let session: Session | null = (await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session) || null;
@@ -107,6 +108,10 @@ router.get('/posts', async (req: Request, res: Response) => {
 
             posts = posts.sort((a, b) => calcStats(b) - calcStats(a));
         }
+
+		if (category != 'all') {
+			posts = posts.filter(p => p.tags.includes(category as string));
+		}
 
         res.status(200).json(posts);
         return
