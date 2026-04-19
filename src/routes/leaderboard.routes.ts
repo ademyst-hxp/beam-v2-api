@@ -45,6 +45,8 @@ router.get('/posts', async (req: Request, res: Response) => {
     let token = req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null;
     let order_by = req.query.sort_by || 'stats'
 	let category = req.query.category || 'all';
+	let after = new Date(req.query.after as string || 0);
+	let before = new Date(req.query.before as string || new Date());
 
     try {
         let session: Session | null = (await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session) || null;
@@ -71,7 +73,7 @@ router.get('/posts', async (req: Request, res: Response) => {
         }
 
         let posts: Post[] = [];
-        let _result: PartialPost[] = await db.all('SELECT * FROM Posts ORDER BY creation_date DESC;') as PartialPost[];
+        let _result: PartialPost[] = await db.all('SELECT * FROM Posts WHERE creation_date >= $1 AND creation_date <= $2 ORDER BY creation_date DESC;', [ after, before ]) as PartialPost[];
 
         for (const p of _result) {
             const profile: PartialProfile | undefined = await db.get('SELECT * FROM Users WHERE id = $1;', [ p.author_id ]) as PartialProfile;
