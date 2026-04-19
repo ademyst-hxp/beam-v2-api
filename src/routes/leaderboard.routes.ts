@@ -14,13 +14,6 @@ const router = Router();
 
 router.get('/users', async (req: Request, res: Response) => {
     try {
-        let session : Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ req.cookies?.token || req.headers?.authorization?.split(' ')[1] || null ]) as Session;
-
-        if (!session) {
-            res.status(401).json({ message: 'Unauthorized' });
-            return
-        }
-
         let users: Profile[] = [];
         let _result: PartialProfile[] = await db.all('SELECT * FROM Users;') as PartialProfile[];
 
@@ -53,12 +46,7 @@ router.get('/posts', async (req: Request, res: Response) => {
     let order_by = req.query.sort_by || 'stats'
 
     try {
-        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
-
-        if (!session) {
-            res.status(401).json({ message: 'Unauthorized' });
-            return
-        }
+        let session: Session | null = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) || null;
 
         let my_relations: Relations | undefined;
         let my_tastes: Tastes | undefined;
@@ -95,7 +83,7 @@ router.get('/posts', async (req: Request, res: Response) => {
             const comments = await db.get(`SELECT COUNT(*) FROM Comments WHERE post_id = $1;`, [ p.id ]);
 
             let new_p: Post = await convertPost(
-                p, 
+                p,
                 { reposts: reposts.count, comments: comments.count },
                 convertProfile(profile, relations, badge)
             )

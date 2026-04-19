@@ -52,12 +52,7 @@ router.get('/:name', async (req: Request, res: Response) => {
     let name: string = req.params.name;
 
     try {
-        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
-
-        if (!session) {
-            res.status(401).json({ message: 'Unauthorized' });
-            return
-        }
+        let session: Session | null = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) || null;
 
         let profile: PartialProfile | undefined;
         profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
@@ -107,12 +102,7 @@ router.get('/:name/avatar.png', async (req: Request, res: Response) => {
     let name: string = req.params.name;
 
     try {
-        let session: Session | undefined = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) as Session;
-
-        if (!session) {
-            res.status(401).json({ message: 'Unauthorized' });
-            return
-        }
+        let session: Session | null = await db.get('SELECT * FROM Sessions WHERE token = $1;', [ token ]) || null;
 
         let _profile: PartialProfile | undefined;
         _profile = await db.get('SELECT * FROM Users WHERE name = $1;', [ name ]) as PartialProfile;
@@ -175,7 +165,7 @@ router.get('/:name/avatar.png', async (req: Request, res: Response) => {
             res.status(404).send({ message: 'Error' })
         }
 
-        
+
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Error' });
@@ -389,7 +379,7 @@ router.post('/:name/follow', async (req: Request, res: Response) => {
                     author: author.id,
                 }
 
-                inbox.other.unshift(new_notif)        
+                inbox.other.unshift(new_notif)
 
                 await db.run('UPDATE Inbox SET other = $1 WHERE id = $2;', [ inbox.other, profile.id ])
 
@@ -572,7 +562,7 @@ router.post('/:name/accept/follow', async (req: Request, res: Response) => {
                     author: author.id,
                 }
 
-                inbox.other.unshift(new_notif)        
+                inbox.other.unshift(new_notif)
 
                 await db.run('UPDATE Inbox SET other = $1 WHERE id = $2;', [ inbox.other, profile.id ])
 
