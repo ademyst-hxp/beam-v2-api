@@ -157,6 +157,15 @@ router.get("/posts", async (req: Request, res: Response) => {
 				convertProfile(profile, relations, badge),
 			);
 
+			const is_visible = (field: string) => can_access(field, profile, relations, session);
+
+			if (
+				is_visible(p.visibility) &&
+				!my_relations.blocklist.includes(new_p.author.id) &&
+				new_p.author.level >= 3
+			) {
+				posts.push(new_p);
+			}
 		}
 
 		if (order_by == "date") {
@@ -177,9 +186,6 @@ router.get("/posts", async (req: Request, res: Response) => {
 			posts = posts.sort((a, b) => calcStats(b) - calcStats(a));
 		}
 
-            if (is_visible(p.visibility) && !my_relations.blocklist.includes(new_p.author.id) && new_p.author.level >= 3) {
-                posts.push(new_p)
-            }
 		if (category != "all") {
 			posts = posts.filter((p) => p.tags.includes(category as string));
 		}
