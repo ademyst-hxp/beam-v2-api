@@ -2,7 +2,6 @@ import { Router } from "express";
 
 import type { Request, Response } from "express";
 
-import { can_access } from "../utils/functions.js";
 import { convertPost, convertProfile } from "../utils/converters.js";
 
 import { db } from "../db/index.js";
@@ -151,15 +150,21 @@ router.get("/posts", async (req: Request, res: Response) => {
 				convertProfile(profile, relations, badge),
 			);
 
-			const is_visible = (field: string) => can_access(field, profile, relations, session);
 
 			if (
-				is_visible(p.visibility) &&
-				!my_relations.blocklist.includes(new_p.author.id) &&
-				new_p.author.level >= 3
+				p.flags.some((f) =>
+					["NFE", "AI", "spam", "harrassment", "suspicious"].includes(
+						f,
+					),
+				) ||
+				p.visibility != "everyone" ||
+				new_p.author.level < 3 ||
+				new_p.author.level > 7
 			) {
-				posts.push(new_p);
+				continue;
 			}
+
+			posts.push(new_p);
 		}
 
 		if (order_by == "date") {
