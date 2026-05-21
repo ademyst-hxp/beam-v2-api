@@ -783,7 +783,7 @@ router.get("/:id/comments", async (req: Request, res: Response) => {
 			} else {
 				__profile = (await db.get(
 					"SELECT * FROM Users WHERE id = $1;",
-					[post.author_id],
+					[c.author_id],
 				)) as PartialProfile;
 			}
 
