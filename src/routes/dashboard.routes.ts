@@ -150,9 +150,10 @@ router.get("/inbox", async (req: Request, res: Response) => {
 	let token =
 		req.cookies?.token || req.headers?.authorization?.split(" ")[1] || null;
 	let leave_unread = req.query.leave_unread === "true" || false;
+	const leave_unread = req.query.leave_unread === "true";
 
 	try {
-		let session: Session | undefined = (await db.get(
+		const session = (await db.get(
 			"SELECT * FROM Sessions WHERE token = $1;",
 			[token],
 		)) as Session;
@@ -162,192 +163,232 @@ router.get("/inbox", async (req: Request, res: Response) => {
 			return;
 		}
 
-		let profile: PartialProfile | undefined;
-		profile = (await db.get("SELECT * FROM Users WHERE id = $1;", [
+		const profile = (await db.get("SELECT * FROM Users WHERE id = $1;", [
 			session.account,
-		])) as PartialProfile;
 
 		if (!profile) {
 			res.status(404).json({ message: "UserNotFound" });
 			return;
 		}
+		)) as Relations | undefined;
 
-		let badge = profile.badge
+		const inbox = (await db.get("SELECT * FROM Inbox WHERE id = $1;", [
+			session.account,
+		])) as PartialInbox | undefined;
+
+		if (!inbox) {
+		}
+
+		const badge = profile.badge
 			? ((await db.get("SELECT * FROM Badges WHERE id = $1;", [
 					profile.badge,
 				])) as Badge)
 			: null;
 
 		let relations: Relations | undefined;
-		relations = (await db.get("SELECT * FROM Relations WHERE id = $1;", [
-			session.account,
-		])) as Relations;
+		/*
+		 * Collecte de tous les IDs nécessaires
+		 */
+		const userIds = new Set<number>();
 
-		let inbox: PartialInbox | undefined;
-		inbox = (await db.get("SELECT * FROM Inbox WHERE id = $1;", [
-			session.account,
-		])) as PartialInbox;
+		for (const u of inbox.outgoing.children) userIds.add(u.to);
+		for (const u of inbox.outgoing.follow) userIds.add(u.to);
+
+		for (const u of inbox.incoming.children) userIds.add(u.from);
+		for (const u of inbox.incoming.follow) userIds.add(u.from);
+
+		for (const n of inbox.other) {
+			if (n.author) {
+				userIds.add(n.author);
+			}
+		}
+
+		const ids = [...userIds];
+
+		/*
+		 * Chargement en batch
+		 */
+		let users: PartialProfile[] = [];
+		let allRelations: Relations[] = [];
+		let badges: Badge[] = [];
+
+		if (ids.length > 0) {
+			const placeholders = ids.map((_, i) => `$${i + 1}`).join(",");
+
+			users = (await db.all(
+				`SELECT * FROM Users WHERE id IN (${placeholders});`,
+				ids,
+			)) as PartialProfile[];
+
+			allRelations = (await db.all(
+				`SELECT * FROM Relations WHERE id IN (${placeholders});`,
+				ids,
+			)) as Relations[];
+
+			const badgeIds = [
+				...new Set(users.map((u) => u.badge).filter(Boolean)),
+			];
+
+			if (badgeIds.length > 0) {
+				const badgePlaceholders = badgeIds
+					.map((_, i) => `$${i + 1}`)
+					.join(",");
+
+				badges = (await db.all(
+					`SELECT * FROM Badges WHERE id IN (${badgePlaceholders});`,
+					badgeIds,
+				)) as Badge[];
+			}
+		}
+
+		/*
+		 * Maps O(1)
+		 */
+		const usersMap = new Map(users.map((u) => [u.id, u]));
+
+		const relationsMap = new Map(allRelations.map((r) => [r.id, r]));
+
+		const badgesMap = new Map(badges.map((b) => [b.id, b]));
+
+		const selfProfile = convertProfile(profile, relations!, badge);
 
 		const new_inbox: Inbox = {
 			id: inbox.id,
-			read: [] as Notification[],
-			unread: [] as Notification[],
+			read: [],
+			unread: [],
 			outgoing: {
-				children: [] as PendingRequest[],
-				follow: [] as PendingRequest[],
+				children: [],
+				follow: [],
 			},
 			incoming: {
-				children: [] as PendingRequest[],
-				follow: [] as PendingRequest[],
+				children: [],
+				follow: [],
 			},
 		};
 
-		for (const u of inbox.outgoing.children) {
-			const _user = (await db.get("SELECT * FROM Users WHERE id = $1;", [
-				u.to,
-			])) as PartialProfile;
+		/*
+		 * Outgoing children
+		 */
+		for (const reqItem of inbox.outgoing.children) {
+			const user = usersMap.get(reqItem.to);
 
-			if (!_user) continue;
-
-			const _badge: Badge | null = _user?.badge
-				? ((await db.get("SELECT * FROM Badges WHERE id = $1;", [
-						_user.badge,
-					])) as Badge)
-				: null;
+			if (!user) continue;
 
 			new_inbox.outgoing.children.push({
-				from: convertProfile(profile, relations, badge),
+				from: selfProfile,
 				to: convertProfile(
-					_user,
-					(await db.get("SELECT * FROM Relations WHERE id = $1;", [
-						_user.id,
-					])) as Relations,
-					_badge,
+					user,
+					relationsMap.get(user.id)!,
+					user.badge ? badgesMap.get(user.badge) || null : null,
 				),
-				date: new Date(u.date),
+				date: new Date(reqItem.date),
 			} as PendingRequest);
 		}
 
-		for (const u of inbox.outgoing.follow) {
-			const _user = (await db.get("SELECT * FROM Users WHERE id = $1;", [
-				u.to,
-			])) as PartialProfile;
+		/*
+		 * Outgoing follow
+		 */
+		for (const reqItem of inbox.outgoing.follow) {
+			const user = usersMap.get(reqItem.to);
 
-			if (!_user) continue;
-
-			const _badge: Badge | null = _user?.badge
-				? ((await db.get("SELECT * FROM Badges WHERE id = $1;", [
-						_user.badge,
-					])) as Badge)
-				: null;
+			if (!user) continue;
 
 			new_inbox.outgoing.follow.push({
-				from: convertProfile(profile, relations, badge),
+				from: selfProfile,
 				to: convertProfile(
-					_user,
-					(await db.get("SELECT * FROM Relations WHERE id = $1;", [
-						_user.id,
-					])) as Relations,
-					_badge,
+					user,
+					relationsMap.get(user.id)!,
+					user.badge ? badgesMap.get(user.badge) || null : null,
 				),
-				date: new Date(u.date),
+				date: new Date(reqItem.date),
 			} as PendingRequest);
 		}
 
-		for (const u of inbox.incoming.children) {
-			const _user = (await db.get("SELECT * FROM Users WHERE id = $1;", [
-				u.from,
-			])) as PartialProfile;
+		/*
+		 * Incoming children
+		 */
+		for (const reqItem of inbox.incoming.children) {
+			const user = usersMap.get(reqItem.from);
 
-			if (!_user) continue;
-
-			const _badge: Badge | null = _user?.badge
-				? ((await db.get("SELECT * FROM Badges WHERE id = $1;", [
-						_user.badge,
-					])) as Badge)
-				: null;
+			if (!user) continue;
 
 			new_inbox.incoming.children.push({
 				from: convertProfile(
-					_user,
-					(await db.get("SELECT * FROM Relations WHERE id = $1;", [
-						_user.id,
-					])) as Relations,
-					_badge,
+					user,
+					relationsMap.get(user.id)!,
+					user.badge ? badgesMap.get(user.badge) || null : null,
 				),
-				to: convertProfile(profile, relations, badge),
-				date: new Date(u.date),
+				to: selfProfile,
+				date: new Date(reqItem.date),
 			} as PendingRequest);
 		}
 
-		for (const u of inbox.incoming.follow) {
-			const _user = (await db.get("SELECT * FROM Users WHERE id = $1;", [
-				u.from,
-			])) as PartialProfile;
+		/*
+		 * Incoming follow
+		 */
+		for (const reqItem of inbox.incoming.follow) {
+			const user = usersMap.get(reqItem.from);
 
-			if (!_user) continue;
-
-			const _badge: Badge | null = _user?.badge
-				? ((await db.get("SELECT * FROM Badges WHERE id = $1;", [
-						_user.badge,
-					])) as Badge)
-				: null;
+			if (!user) continue;
 
 			new_inbox.incoming.follow.push({
 				from: convertProfile(
-					_user,
-					(await db.get("SELECT * FROM Relations WHERE id = $1;", [
-						_user.id,
-					])) as Relations,
-					_badge,
+					user,
+					relationsMap.get(user.id)!,
+					user.badge ? badgesMap.get(user.badge) || null : null,
 				),
-				to: convertProfile(profile, relations, badge),
-				date: new Date(u.date),
+				to: selfProfile,
+				date: new Date(reqItem.date),
 			} as PendingRequest);
 		}
 
-		for (const n of inbox.other) {
-			let new_n: Notification = { ...n } as Notification;
+		/*
+		 * Notifications
+		 */
+		for (const notification of inbox.other) {
+			const newNotification: Notification = {
+				...notification,
+			} as Notification;
 
-			if (n.author) {
-				const _user = (await db.get(
-					"SELECT * FROM Users WHERE id = $1;",
-					[n.author],
-				)) as PartialProfile;
-				if (!_user) continue;
+			if (notification.author) {
+				const author = usersMap.get(notification.author);
 
-				const _badge: Badge | null = _user.badge
-					? ((await db.get("SELECT * FROM Badges WHERE id = $1;", [
-							_user.badge,
-						])) as Badge)
-					: null;
-				new_n.author = convertProfile(
-					_user,
-					(await db.get("SELECT * FROM Relations WHERE id = $1;", [
-						_user.id,
-					])) as Relations,
-					_badge,
+				if (!author) continue;
+
+				newNotification.author = convertProfile(
+					author,
+					relationsMap.get(author.id)!,
+					author.badge ? badgesMap.get(author.badge) || null : null,
 				);
 			}
 
-			if (n.read) {
-				new_inbox.read.push(new_n);
+			if (notification.read) {
+				new_inbox.read.push(newNotification);
 			} else {
-				new_inbox.unread.push(new_n);
+				new_inbox.unread.push(newNotification);
 			}
 		}
 
 		res.status(200).json(new_inbox);
 
+		/*
+		 * Marquer comme lu en arrière-plan
+		 */
 		if (!leave_unread) {
-			for (const n of inbox.other) {
-				n.read = true;
-			}
+			void (async () => {
+				try {
+					for (const n of inbox.other) {
+						n.read = true;
+					}
 
-			await db.run("UPDATE Inbox SET other = $1 WHERE id = $2;", [
-				inbox.other,
-				inbox.id,
-			]);
+					await db.run("UPDATE Inbox SET other = $1 WHERE id = $2;", [
+						inbox.other,
+						inbox.id,
+					]);
+				} catch (err) {
+					console.error(err);
+				}
+			})();
 		}
 	} catch (err) {
 		console.error(err);
