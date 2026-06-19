@@ -252,7 +252,7 @@ router.post('/signup', async (req: Request, res: Response) => {
 
 
         const account: Account = {
-            id: genChar(8, 'hex').toUpperCase(),
+            id: genChar(4, 'hex').toUpperCase(),
             username: username,
             email: email,
             password_hash: password_hash
