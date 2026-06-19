@@ -149,27 +149,30 @@ router.get("/", async (req: Request, res: Response) => {
 router.get("/inbox", async (req: Request, res: Response) => {
 	let token =
 		req.cookies?.token || req.headers?.authorization?.split(" ")[1] || null;
-	let leave_unread = req.query.leave_unread === "true" || false;
+
 	const leave_unread = req.query.leave_unread === "true";
 
 	try {
 		const session = (await db.get(
 			"SELECT * FROM Sessions WHERE token = $1;",
 			[token],
-		)) as Session;
+		)) as Session | undefined;
 
 		if (!session) {
-			res.status(401).json({ message: "Unauthorized" });
-			return;
+			return res.status(401).json({ message: "Unauthorized" });
 		}
 
 		const profile = (await db.get("SELECT * FROM Users WHERE id = $1;", [
 			session.account,
+		])) as PartialProfile | undefined;
 
 		if (!profile) {
-			res.status(404).json({ message: "UserNotFound" });
-			return;
+			return res.status(404).json({ message: "UserNotFound" });
 		}
+
+		const relations = (await db.get(
+			"SELECT * FROM Relations WHERE id = $1;",
+			[session.account],
 		)) as Relations | undefined;
 
 		const inbox = (await db.get("SELECT * FROM Inbox WHERE id = $1;", [
@@ -177,6 +180,9 @@ router.get("/inbox", async (req: Request, res: Response) => {
 		])) as PartialInbox | undefined;
 
 		if (!inbox) {
+			return res.status(404).json({
+				message: "InboxNotFound",
+			});
 		}
 
 		const badge = profile.badge
@@ -185,7 +191,6 @@ router.get("/inbox", async (req: Request, res: Response) => {
 				])) as Badge)
 			: null;
 
-		let relations: Relations | undefined;
 		/*
 		 * Collecte de tous les IDs nécessaires
 		 */
