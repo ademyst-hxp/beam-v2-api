@@ -607,7 +607,7 @@ router.post("/account-transfer", async (req: Request, res: Response) => {
 			return;
 		}
 
-		if (result.action !== "account-transfer") {
+		if (result.action !== "transfer-account") {
 			console.log("Invalid action for token:", result.action);
 			res.status(401).json({ message: "InvalidToken" });
 			return;
