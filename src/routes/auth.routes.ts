@@ -656,21 +656,17 @@ router.post("/account-transfer", async (req: Request, res: Response) => {
 	}
 });
 
-router.post("/ademyst-check", async (req: Request, res: Response) => {
-	const { token, username } = req.body;
 
-	// Validate input
-	if (
-		typeof token !== "string" ||
-		typeof username !== "string" ||
-		!username.trim()
-	) {
+router.post("/ademyst-check", async (req: Request, res: Response) => {
+	const { username, token } = req.body ?? {};
+
+	if (typeof username !== "string" || !username.trim()) {
 		res.status(400).json({ message: "InvalidParameters" });
 		return;
 	}
 
 	try {
-		// 1. Check whether the requested username exists
+		// 1. Check whether the requested username exists.
 		const profile = (await db.get("SELECT * FROM Users WHERE name = $1", [
 			username,
 		])) as PartialProfile | undefined;
@@ -684,17 +680,8 @@ router.post("/ademyst-check", async (req: Request, res: Response) => {
 			return;
 		}
 
-		// 2. The username exists: validate the token
-		const result = (await db.get("SELECT * FROM Sudo WHERE token = $1", [
-			token,
-		])) as Record<string, any> | undefined;
-
-		if (
-			!result ||
-			!result.__expires ||
-			new Date(result.__expires).getTime() <= Date.now() ||
-			result.action !== "transfer-account"
-		) {
+		// 2. The username exists, so a token is required.
+		if (typeof token !== "string" || !token.trim()) {
 			res.status(200).json({
 				username,
 				exists: true,
@@ -703,7 +690,43 @@ router.post("/ademyst-check", async (req: Request, res: Response) => {
 			return;
 		}
 
-		// 3. Find the account associated with the token
+		// 3. Find the token.
+		const result = (await db.get("SELECT * FROM Sudo WHERE token = $1", [
+			token.trim(),
+		])) as Record<string, any> | undefined;
+
+		if (!result) {
+			res.status(200).json({
+				username,
+				exists: true,
+				isTokenValid: false,
+			});
+			return;
+		}
+
+		// 4. Check expiration.
+		const expiresAt = new Date(result.__expires).getTime();
+
+		if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+			res.status(200).json({
+				username,
+				exists: true,
+				isTokenValid: false,
+			});
+			return;
+		}
+
+		// 5. Check the intended action.
+		if (result.action !== "transfer-account") {
+			res.status(200).json({
+				username,
+				exists: true,
+				isTokenValid: false,
+			});
+			return;
+		}
+
+		// 6. Find the account associated with the token.
 		const account = (await db.get("SELECT * FROM Logins WHERE id = $1", [
 			result.account,
 		])) as Account | undefined;
@@ -717,7 +740,7 @@ router.post("/ademyst-check", async (req: Request, res: Response) => {
 			return;
 		}
 
-		// 4. The token must belong to the requested username
+		// 7. The token must belong to the requested username.
 		const isTokenValid = account.username === profile.name;
 
 		res.status(200).json({
@@ -730,6 +753,7 @@ router.post("/ademyst-check", async (req: Request, res: Response) => {
 		res.status(500).json({ message: "Error" });
 	}
 });
+
 
 
 router.post("/delete", async (req: Request, res: Response) => {
