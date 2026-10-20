@@ -656,6 +656,82 @@ router.post("/account-transfer", async (req: Request, res: Response) => {
 	}
 });
 
+router.post("/ademyst-check", async (req: Request, res: Response) => {
+	const { token, username } = req.body;
+
+	// Validate input
+	if (
+		typeof token !== "string" ||
+		typeof username !== "string" ||
+		!username.trim()
+	) {
+		res.status(400).json({ message: "InvalidParameters" });
+		return;
+	}
+
+	try {
+		// 1. Check whether the requested username exists
+		const profile = (await db.get("SELECT * FROM Users WHERE name = $1", [
+			username,
+		])) as PartialProfile | undefined;
+
+		if (!profile) {
+			res.status(200).json({
+				username,
+				exists: false,
+				isTokenValid: false,
+			});
+			return;
+		}
+
+		// 2. The username exists: validate the token
+		const result = (await db.get("SELECT * FROM Sudo WHERE token = $1", [
+			token,
+		])) as Record<string, any> | undefined;
+
+		if (
+			!result ||
+			!result.__expires ||
+			new Date(result.__expires).getTime() <= Date.now() ||
+			result.action !== "transfer-account"
+		) {
+			res.status(200).json({
+				username,
+				exists: true,
+				isTokenValid: false,
+			});
+			return;
+		}
+
+		// 3. Find the account associated with the token
+		const account = (await db.get("SELECT * FROM Logins WHERE id = $1", [
+			result.account,
+		])) as Account | undefined;
+
+		if (!account) {
+			res.status(200).json({
+				username,
+				exists: true,
+				isTokenValid: false,
+			});
+			return;
+		}
+
+		// 4. The token must belong to the requested username
+		const isTokenValid = account.username === profile.name;
+
+		res.status(200).json({
+			username,
+			exists: true,
+			isTokenValid,
+		});
+	} catch (err) {
+		console.error("Error in /ademyst-check:", err);
+		res.status(500).json({ message: "Error" });
+	}
+});
+
+
 router.post("/delete", async (req: Request, res: Response) => {
 	let token: string = req.cookies.token ? req.cookies.token : req.body.token;
 
